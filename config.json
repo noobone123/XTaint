@@ -1,0 +1,15 @@
+{
+    "ida_pro": {
+        "ida_home": "/home/h1k0/sectools/idapro-7.6",
+        "idb_tmpdir": "/tmp/tmp_idb"
+    },
+
+    "ida_start": "./dataflow/ida_plugin/ida_start.sh",
+    "ida_get_cfg": "./dataflow/ida_plugin/get_cfg.py",
+
+    "analysis_error": "logs/analysis_error.txt",
+
+    "data": {
+        "data_home": "./data"
+    }
+}
