@@ -15,7 +15,6 @@ import json
 def get_all_functions():
     global segments
 
-
 def init():
     base = get_imagebase()
     plt_start, plt_end = 0, 0
@@ -88,6 +87,11 @@ def init():
             print("Couldn't found bss segment, should custom label!!!")
 
 if __name__ == "__main__":
-    init()
+    # print into stdout
+    # init()
 
     functions = get_all_functions()
+    print(functions)
+    
+    # quit ida
+    idaapi.auto_wait()

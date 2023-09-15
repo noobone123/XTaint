@@ -21,17 +21,20 @@ class EmTaintAnalyzer():
         try:
             with open(CONFIG, "r") as f:
                 self.config = json.load(f)
-                print("Current config: {}".format(self.config))
+                print("^^^^^^^^^^^ Current Config ^^^^^^^^^^^")
+                print(json.dumps(self.config, indent=4))
+                print("^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^")
         except Exception as e:
             print("Error: {}".format(e))
             sys.exit()
         
         # init data storage folder used by analyzer
         self.data_home_dir = self.config["data"]["data_home"]
-        self.firmware_dir = os.path.join(self.data_home_dir, self.firmware_name)
-        self.binary_dir = os.path.join(self.firmware_dir, self.binary_name)
-        self.ida_preprocess_dir = os.path.join(self.binary_dir, "ida_preprocess")
-        self.result_dir = os.path.join(self.binary_dir, "result")
+        # make following path as absolute path
+        self.firmware_dir = os.path.abspath(os.path.join(self.data_home_dir, self.firmware_name))
+        self.binary_dir = os.path.abspath(os.path.join(self.firmware_dir, self.binary_name))
+        self.ida_preprocess_dir = os.path.abspath(os.path.join(self.binary_dir, "ida_preprocess"))
+        self.result_dir = os.path.abspath(os.path.join(self.binary_dir, "result"))
 
         self.init_data_storage()
 

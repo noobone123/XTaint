@@ -31,35 +31,52 @@ def get_binary_arch(binary_path):
     else:
         raise Exception("get binary arch failed: %s" % stderr)
 
+def run_ida_headless(cmd):
+    try:
+        p = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+        stdout, stderr = p.communicate()
+        if p.returncode == 0:
+            return stdout.decode()
+        else:
+            raise Exception("run ida headless failed: %s" % stderr)
+    except Exception as e:
+        raise Exception("run ida headless failed: %s" % e)
 
 def ida_preprocess(binary_path, ida_preprocess_dir, config):
     """
     Use IDA Pro to preprocess binary file, and save the result to ida_preprocess_dir
     """
     ida_home = config["ida_pro"]["ida_home"]
-    idb_tmpdir = config["ida_pro"]["idb_tmpdir"]
+    binary_name = os.path.basename(binary_path)
+
+    # TODO: add a config to decide whether put idb in /tmp or in ida_preprocess
+    # idb_tmpdir = config["ida_pro"]["idb_tmpdir"]
 
     arch, bit = get_binary_arch(binary_path)
     if bit == 32:
         ida_engine = os.path.join(ida_home, "idat")
+        idb_path = os.path.join(ida_preprocess_dir, f"{binary_name}.idb")
     elif bit == 64:
         ida_engine = os.path.join(ida_home, "idat64")
+        idb_path = os.path.join(ida_preprocess_dir, f"{binary_name}.i64")
     else:
         raise Exception("Unknown binary arch")
-    
-    idb_path = os.path.join(idb_tmpdir, "ida_preprocess.idb")
     
     # TODO: add x86 and mips support
     if arch == "arm":
         ida_script_path = os.path.join(os.path.dirname(__file__), "parse_arm_binary.py")
-        print(ida_script_path)
     else:
         raise NotImplementedError("Not support arch: %s" % arch)
-
-    # # TODO: to be done...
-    # print("start analyze binary using ida...")
-    # if os.path.exists(ida_engine_path):
-    #     os.system('%s %s %s %s' % (ida_start, ida_engine_path, binary_path, idb_save_path))
-    #     os.system("TVHEADLESS=1 %s -A -S'%s %s ' %s > /dev/null" % (ida_engine_path, ida_get_cfg, ida_data_path, idb_save_path))
-    #     # print("idb-path: %s" % (idb_save_path))
-    #     # os.system("%s -S'%s %s ' %s" % (ida_engine_path, ida_get_cfg, ida_data_path, idb_save_path))
+    
+    # create idb first
+    if not os.path.exists(idb_path):
+        print("Creating idb file: %s" % idb_path)
+        cmd = [ida_engine, "-B", f"-o{idb_path}", binary_path]
+        run_ida_headless(cmd)
+        print("Created idb file: %s" % idb_path)
+    
+    # run ida script
+    cmd = [ida_engine, "-A", f"-S\"{ida_script_path} {ida_preprocess_dir}\"", idb_path]
+    print("Running command: %s" % " ".join(cmd))
+    # run_ida_headless(cmd)
+    print("IDA preprocess done!")
