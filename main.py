@@ -13,7 +13,7 @@ class EmTaintAnalyzer():
     def __init__(self, firmware_name: str, 
                     binary_filepath: str):
 
-        self.binary_filepath = binary_filepath    
+        self.binary_filepath = os.path.abspath(binary_filepath)
         self.firmware_name = firmware_name
         self.binary_name = os.path.basename(self.binary_filepath)
 

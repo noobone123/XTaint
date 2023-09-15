@@ -32,15 +32,9 @@ def get_binary_arch(binary_path):
         raise Exception("get binary arch failed: %s" % stderr)
 
 def run_ida_headless(cmd):
-    try:
-        p = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
-        stdout, stderr = p.communicate()
-        if p.returncode == 0:
-            return stdout.decode()
-        else:
-            raise Exception("run ida headless failed: %s" % stderr)
-    except Exception as e:
-        raise Exception("run ida headless failed: %s" % e)
+    ret = os.system(cmd)
+    if ret != 0:
+        raise Exception("Run IDA headless failed: %s" % cmd)
 
 def ida_preprocess(binary_path, ida_preprocess_dir, config):
     """
@@ -71,12 +65,12 @@ def ida_preprocess(binary_path, ida_preprocess_dir, config):
     # create idb first
     if not os.path.exists(idb_path):
         print("Creating idb file: %s" % idb_path)
-        cmd = [ida_engine, "-B", f"-o{idb_path}", binary_path]
+        cmd = f"{ida_engine} -B -o{idb_path} {binary_path}"
         run_ida_headless(cmd)
         print("Created idb file: %s" % idb_path)
     
     # run ida script
-    cmd = [ida_engine, "-A", f"-S\"{ida_script_path} {ida_preprocess_dir}\"", idb_path]
-    print("Running command: %s" % " ".join(cmd))
-    # run_ida_headless(cmd)
+    cmd = f"python3 {ida_script_path} {ida_engine} {idb_path}"
+    print("Running command: %s" % cmd)
+    run_ida_headless(cmd)
     print("IDA preprocess done!")
