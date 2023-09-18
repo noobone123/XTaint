@@ -70,7 +70,7 @@ def ida_preprocess(binary_path, ida_preprocess_dir, config):
         print("Created idb file: %s" % idb_path)
     
     # run ida script
-    cmd = f"python3 {ida_script_path} {ida_engine} {idb_path}"
+    cmd = f"python3 {ida_script_path} {ida_engine} {idb_path} {ida_preprocess_dir}"
     print("Running command: %s" % cmd)
     run_ida_headless(cmd)
     print("IDA preprocess done!")
