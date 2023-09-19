@@ -4,8 +4,10 @@ import pathlib
 import json
 import os
 import shutil
+import angr
 
 from utils.ida_plugin import ida_preprocess
+from utils.bin_factory import BinFactory
 
 CONFIG = pathlib.Path(__file__).parent / "config.json"
 
@@ -49,8 +51,15 @@ class EmTaintAnalyzer():
             print("Delete old analyze target result dir: {}".format(self.result_dir))
         os.makedirs(self.result_dir)
 
+
     def run(self):
+        """
+        Running the `EmTaintAnalyzer`
+        """
         ida_preprocess(self.binary_filepath, self.ida_preprocess_dir, self.config)
+
+        proj = angr.Project(self.binary_filepath)
+        bin_factory = BinFactory(proj, self.ida_preprocess_dir)
         
 
 if __name__ == "__main__":

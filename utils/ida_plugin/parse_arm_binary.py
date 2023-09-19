@@ -309,12 +309,12 @@ def get_cfg_block_info():
             switch_bb_info = get_switch_bb_info(maybe_switch_bb)
             for sbb, switch_ea in switch_bb_info.items():
                 sbb_start = sbb.start_ea
-                if function_name not in switch_record:
-                    switch_record[function_name] = []
-                switch_record[function_name].append((sbb_start, switch_ea))
+                if ea not in switch_record:
+                    switch_record[ea] = []
+                switch_record[ea].append((sbb_start, switch_ea))
         
         # record cfg info
-        cfg_record[function_name] = func_info
+        cfg_record[ea] = func_info
 
 
     return cfg_record, callinfo_record, switch_record
@@ -338,11 +338,11 @@ if __name__ == "__main__":
 
     cfg_record, callinfo_record, switch_record = get_cfg_block_info()
 
-    with open(os.path.join(preprocess_dir, f"{file_name}_cfg.json"), "w") as f:
+    with open(os.path.join(preprocess_dir, f"cfg.json"), "w") as f:
         json.dump(cfg_record, f, indent=4)
     
-    with open(os.path.join(preprocess_dir, f"{file_name}_callinfo.json"), "w") as f:
+    with open(os.path.join(preprocess_dir, f"callinfo.json"), "w") as f:
         json.dump(callinfo_record, f, indent=4)
     
-    with open(os.path.join(preprocess_dir, f"{file_name}_switch.json"), "w") as f:
+    with open(os.path.join(preprocess_dir, f"switch.json"), "w") as f:
         json.dump(switch_record, f, indent=4)

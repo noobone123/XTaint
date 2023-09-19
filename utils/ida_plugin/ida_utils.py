@@ -69,6 +69,13 @@ def ida_preprocess(binary_path, ida_preprocess_dir, config):
         run_ida_headless(cmd)
         print("Created idb file: %s" % idb_path)
     
+    # if ida preprocess already done, skip
+    if os.path.exists(os.path.join(ida_preprocess_dir, "callinfo.json")) and \
+        os.path.exists(os.path.join(ida_preprocess_dir, "cfg.json")) and \
+        os.path.exists(os.path.join(ida_preprocess_dir, "switch.json")):
+        print("IDA preprocess already done!")
+        return
+
     # run ida script
     cmd = f"python3 {ida_script_path} {ida_engine} {idb_path} {ida_preprocess_dir}"
     print("Running command: %s" % cmd)
