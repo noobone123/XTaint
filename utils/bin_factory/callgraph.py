@@ -16,7 +16,15 @@ class CallGraph(GraphBase):
 
         self._initialize_graph()
 
-    def get_function_by_addr(self, addr):
+    def add_node(self, node):
+        """
+        Add a node to the graph.
+        """
+        if node.addr not in self._nodes:
+            self._nodes[node.addr] = node
+            self.graph.add_node(node)
+
+    def get_node(self, addr):
         """
         get a function node by addr
         """

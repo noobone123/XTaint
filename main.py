@@ -71,12 +71,16 @@ class EmTaintAnalyzer():
                 start = section.vaddr
                 end = section.vaddr + section.memsize
                 self.binary_info.sections[region_name] = (start, end)
-                print("Section: {}, start: {}, end: {}".format(region_name, start, end))
+                print("Section: {}, start: {}, end: {}".format(region_name, hex(start), hex(end)))
 
         min_addr, max_addr = self.proj.loader.min_addr, self.proj.loader.max_addr
         self.binary_info.sections['.loader'] = (min_addr, max_addr)
+        print("Section: {}, start: {}, end: {}".format('.loader', hex(min_addr), hex(max_addr)))
+        
         extern_obj = self.proj.loader.extern_object
         self.binary_info.sections['.extern'] = (extern_obj.min_addr, extern_obj.max_addr)
+        print("Section: {}, start: {}, end: {}".format('.extern', hex(extern_obj.min_addr), hex(extern_obj.max_addr)))
+
 
     def run(self):
         """

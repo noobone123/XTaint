@@ -7,6 +7,7 @@ from .callgraph import CallGraph
 from .cfg import CFG
 from .basicblock import BasicBlock
 from .binaryinfo import BinaryInfo
+from .function_obj import FunctionObj
 
 class BinFactory(object):
     """
@@ -54,6 +55,7 @@ class BinFactory(object):
             break
         min_addr, max_addr = self.binary_info.sections['.loader']
         if func_ea <= min_addr and min_addr & 0x400000 == 0x400000:
+            print("Binary base address has been rebased to 0x400000")
             self.base_addr = 0x400000
 
     def fast_build(self):
@@ -100,4 +102,25 @@ class BinFactory(object):
             # BUILD the CallGraph
             calls = self.cfg_record[func]['call']
             if func_ea not in self.cg._nodes:
-                # caller = 
+                caller_obj = FunctionObj(
+                    func_ea,
+                    procedural_name = func_name,
+                )
+                self.cg.add_node(caller_obj)
+                pass
+            else:
+                caller_obj = self.cg.get_node(func_ea)
+                if caller_obj.procedural_name == None:
+                    raise Exception("Unresolved function name: {}".format(hex(func_ea)))
+            
+            for call_info in calls:
+                bb_start, callsite, target = call_info
+                bb_start = bb_start + self.base_addr
+                callsite = callsite + self.base_addr
+                # if callee is an internal function, target is the function address
+                # if callee if an external function, target is the function name
+                if type(target) == int:
+                    target = target + self.base_addr
+
+        
+        print("Function CFG and CG built successfully.")
