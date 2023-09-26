@@ -18,6 +18,7 @@ class EmTaintAnalyzer():
         self.binary_filepath = os.path.abspath(binary_filepath)
         self.firmware_name = firmware_name
         self.binary_name = os.path.basename(self.binary_filepath)
+        self.binary_sections = {}
 
         # Load configures
         try:
@@ -40,6 +41,7 @@ class EmTaintAnalyzer():
 
         self.init_data_storage()
 
+
     def init_data_storage(self):
         if not os.path.exists(self.ida_preprocess_dir):
             os.makedirs(self.ida_preprocess_dir)
@@ -52,14 +54,42 @@ class EmTaintAnalyzer():
         os.makedirs(self.result_dir)
 
 
+    def init_binary_info(self):
+        """
+        Extract binary info from angr project and initialize global info.
+        """
+        main_obj = self.proj.loader.main_object
+
+        code_region_names = ['.text']
+        ro_region_names = ['.rodata', '.rdata', '.got', '.init_array', '.plt']
+        rw_region_names = ['.data', '.data.rel.ro', '.data.rel.ro.local',]
+        bss_region_names = ['.bss', '.sbss']
+        choose_region_names = ro_region_names + rw_region_names + bss_region_names + code_region_names
+
+        for section in main_obj.sections:
+            region_name = section.name
+            if region_name in choose_region_names:
+                start = section.vaddr
+                end = section.vaddr + section.memsize
+                self.binary_sections[region_name] = (start, end)
+                print("Section: {}, start: {}, end: {}".format(region_name, start, end))
+
+        min_addr, max_addr = self.proj.loader.min_addr, self.proj.loader.max_addr
+        self.binary_sections['.loader'] = (min_addr, max_addr)
+        extern_obj = self.proj.loader.extern_object
+        self.binary_sections['.extern'] = (extern_obj.min_addr, extern_obj.max_addr)
+
+
     def run(self):
         """
         Running the `EmTaintAnalyzer`
         """
         ida_preprocess(self.binary_filepath, self.ida_preprocess_dir, self.config)
 
-        proj = angr.Project(self.binary_filepath)
-        bin_factory = BinFactory(proj, self.ida_preprocess_dir)
+        self.proj = angr.Project(self.binary_filepath)
+        self.init_binary_info()
+        
+        bin_factory = BinFactory(self.proj, self.ida_preprocess_dir)
         
 
 if __name__ == "__main__":
