@@ -7,7 +7,7 @@ import shutil
 import angr
 
 from utils.ida_plugin import ida_preprocess
-from utils.bin_factory import BinFactory
+from utils.bin_factory import BinFactory, BinaryInfo
 
 CONFIG = pathlib.Path(__file__).parent / "config.json"
 
@@ -18,7 +18,6 @@ class EmTaintAnalyzer():
         self.binary_filepath = os.path.abspath(binary_filepath)
         self.firmware_name = firmware_name
         self.binary_name = os.path.basename(self.binary_filepath)
-        self.binary_sections = {}
 
         # Load configures
         try:
@@ -54,7 +53,7 @@ class EmTaintAnalyzer():
         os.makedirs(self.result_dir)
 
 
-    def init_binary_info(self):
+    def init_binary_sections(self):
         """
         Extract binary info from angr project and initialize global info.
         """
@@ -71,14 +70,13 @@ class EmTaintAnalyzer():
             if region_name in choose_region_names:
                 start = section.vaddr
                 end = section.vaddr + section.memsize
-                self.binary_sections[region_name] = (start, end)
+                self.binary_info.sections[region_name] = (start, end)
                 print("Section: {}, start: {}, end: {}".format(region_name, start, end))
 
         min_addr, max_addr = self.proj.loader.min_addr, self.proj.loader.max_addr
-        self.binary_sections['.loader'] = (min_addr, max_addr)
+        self.binary_info.sections['.loader'] = (min_addr, max_addr)
         extern_obj = self.proj.loader.extern_object
-        self.binary_sections['.extern'] = (extern_obj.min_addr, extern_obj.max_addr)
-
+        self.binary_info.sections['.extern'] = (extern_obj.min_addr, extern_obj.max_addr)
 
     def run(self):
         """
@@ -87,11 +85,12 @@ class EmTaintAnalyzer():
         ida_preprocess(self.binary_filepath, self.ida_preprocess_dir, self.config)
 
         self.proj = angr.Project(self.binary_filepath)
-        self.init_binary_info()
+        self.binary_info = BinaryInfo(self.proj)
+        self.init_binary_sections()
         
         bin_factory = BinFactory(self.proj, 
                                  self.ida_preprocess_dir,
-                                 self.binary_sections)
+                                 self.binary_info)
         
 
 if __name__ == "__main__":

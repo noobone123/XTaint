@@ -6,19 +6,20 @@ import angr
 from .callgraph import CallGraph
 from .cfg import CFG
 from .basicblock import BasicBlock
+from .binaryinfo import BinaryInfo
 
 class BinFactory(object):
     """
     Generate CFG and CallGraph by the block and jump info extracting from 
     IDA Pro.
     """
-    def __init__(self, angr_proj, 
+    def __init__(self, angr_proj: angr.Project, 
                        ida_preprocess_dir,
-                       binary_sections,
+                       binary_info: BinaryInfo,
                        base_addr = 0x0):
         
         self.angr_proj = angr_proj
-        self.binary_sections = binary_sections
+        self.binary_info = binary_info
         self.base_addr = base_addr
 
         callinfo_path = os.path.join(ida_preprocess_dir, 'callinfo.json')
@@ -51,7 +52,7 @@ class BinFactory(object):
         for func_addr in self.cfg_record:
             func_ea = int(func_addr, 16)
             break
-        min_addr, max_addr = self.binary_sections['.loader']
+        min_addr, max_addr = self.binary_info.sections['.loader']
         if func_ea <= min_addr and min_addr & 0x400000 == 0x400000:
             self.base_addr = 0x400000
 
@@ -62,6 +63,7 @@ class BinFactory(object):
         func_cnt = 0
 
         for func in self.functions:
+            # BUILD the CFG
             blocks = self.cfg_record[func]['block']
             edges = self.cfg_record[func]['control-flow']
             func_name = self.cfg_record[func]['name']
@@ -93,3 +95,9 @@ class BinFactory(object):
                 dst_bb = self.cfg.get_node(dst_addr)
                 
                 self.cfg.add_edge(src_bb, dst_bb, kwargs = {'jumpkind': 'Boring'})
+
+
+            # BUILD the CallGraph
+            calls = self.cfg_record[func]['call']
+            if func_ea not in self.cg._nodes:
+                # caller = 
