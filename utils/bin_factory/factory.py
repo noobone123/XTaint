@@ -1,5 +1,6 @@
 import os
 import json
+from typing import Any
 import angr
 
 from .callgraph import CallGraph
@@ -13,9 +14,11 @@ class BinFactory(object):
     """
     def __init__(self, angr_proj, 
                        ida_preprocess_dir,
+                       binary_sections,
                        base_addr = 0x0):
         
         self.angr_proj = angr_proj
+        self.binary_sections = binary_sections
         self.base_addr = base_addr
 
         callinfo_path = os.path.join(ida_preprocess_dir, 'callinfo.json')
@@ -37,8 +40,20 @@ class BinFactory(object):
         self.cg = CallGraph()
         self.cfg = CFG()
 
+        self.rebase_binary()
         self.fast_build()
 
+    def rebase_binary(self):
+        """
+        Rebase the PIE binary to the 0x400000
+        """
+        func_ea = 0
+        for func_addr in self.cfg_record:
+            func_ea = int(func_addr, 16)
+            break
+        min_addr, max_addr = self.binary_sections['.loader']
+        if func_ea <= min_addr and min_addr & 0x400000 == 0x400000:
+            self.base_addr = 0x400000
 
     def fast_build(self):
         """
@@ -59,7 +74,7 @@ class BinFactory(object):
             # build basic blocks
             for bb in blocks:
                 nodes = []
-                bb_start, bb_end = bb
+                bb_start, bb_end = bb[0] + self.base_addr, bb[1] + self.base_addr
 
                 if bb_start == bb_end:
                     tail_calls.add(bb_start)
@@ -70,7 +85,7 @@ class BinFactory(object):
 
             # build edges
             for edge in edges:
-                src_addr, dst_addr = edge
+                src_addr, dst_addr = edge[0] + self.base_addr, edge[1] + self.base_addr
                 if dst_addr in tail_calls:
                     continue
                 

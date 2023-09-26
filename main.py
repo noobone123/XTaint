@@ -89,7 +89,9 @@ class EmTaintAnalyzer():
         self.proj = angr.Project(self.binary_filepath)
         self.init_binary_info()
         
-        bin_factory = BinFactory(self.proj, self.ida_preprocess_dir)
+        bin_factory = BinFactory(self.proj, 
+                                 self.ida_preprocess_dir,
+                                 self.binary_sections)
         
 
 if __name__ == "__main__":
