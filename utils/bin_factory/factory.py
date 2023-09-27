@@ -8,6 +8,10 @@ from .cfg import CFG
 from .basicblock import BasicBlock
 from .binaryinfo import BinaryInfo
 from .function_obj import FunctionObj
+from ..logger import get_logger
+
+logger = get_logger("BinFactory")
+logger.setLevel("INFO")
 
 class BinFactory(object):
     """
@@ -55,7 +59,7 @@ class BinFactory(object):
             break
         min_addr, max_addr = self.binary_info.sections['.loader']
         if func_ea <= min_addr and min_addr & 0x400000 == 0x400000:
-            print("Binary base address has been rebased to 0x400000")
+            logger.warning("Binary base address has been rebased to 0x400000")
             self.base_addr = 0x400000
 
     def fast_build(self):
@@ -121,6 +125,10 @@ class BinFactory(object):
                 # if callee if an external function, target is the function name
                 if type(target) == int:
                     target = target + self.base_addr
+                
+                src_bb = self.cfg.get_node(bb_start)
+                if src_bb is None:
+                    pass
 
         
-        print("Function CFG and CG built successfully.")
+        logger.info("Function CFG and CG built successfully.")

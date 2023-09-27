@@ -3,6 +3,11 @@ import os
 import configparser
 import subprocess
 
+from ..logger import get_logger
+
+logger = get_logger("IDA_Utils")
+logger.setLevel("INFO")
+
 def get_binary_arch(binary_path):
     """
     run file command to get binary arch
@@ -64,20 +69,20 @@ def ida_preprocess(binary_path, ida_preprocess_dir, config):
     
     # create idb first
     if not os.path.exists(idb_path):
-        print("Creating idb file: %s" % idb_path)
+        logger.info("Creating idb file: %s" % idb_path)
         cmd = f"{ida_engine} -B -o{idb_path} {binary_path}"
         run_ida_headless(cmd)
-        print("Created idb file: %s" % idb_path)
+        logger.info("Created idb file: %s" % idb_path)
     
     # if ida preprocess already done, skip
     if os.path.exists(os.path.join(ida_preprocess_dir, "callinfo.json")) and \
         os.path.exists(os.path.join(ida_preprocess_dir, "cfg.json")) and \
         os.path.exists(os.path.join(ida_preprocess_dir, "switch.json")):
-        print("IDA preprocess already done!")
+        logger.info("IDA preprocess already done!")
         return
 
     # run ida script
     cmd = f"python3 {ida_script_path} {ida_engine} {idb_path} {ida_preprocess_dir}"
-    print("Running command: %s" % cmd)
+    logger.info("Running command: %s" % cmd)
     run_ida_headless(cmd)
-    print("IDA preprocess done!")
+    logger.info("IDA preprocess done!")

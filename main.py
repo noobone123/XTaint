@@ -8,8 +8,12 @@ import angr
 
 from utils.ida_plugin import ida_preprocess
 from utils.bin_factory import BinFactory, BinaryInfo
+from utils.logger import get_logger
 
 CONFIG = pathlib.Path(__file__).parent / "config.json"
+
+logger = get_logger("Analyzer")
+logger.setLevel("INFO")
 
 class EmTaintAnalyzer():
     def __init__(self, firmware_name: str, 
@@ -23,11 +27,11 @@ class EmTaintAnalyzer():
         try:
             with open(CONFIG, "r") as f:
                 self.config = json.load(f)
-                print("^^^^^^^^^^^ Current Config ^^^^^^^^^^^")
-                print(json.dumps(self.config, indent=4))
-                print("^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^")
+                logger.info("^^^^^^^^^^^ Current Config ^^^^^^^^^^^")
+                logger.info(json.dumps(self.config, indent=4))
+                logger.info("^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^")
         except Exception as e:
-            print("Error: {}".format(e))
+            logger.error("Error: {}".format(e))
             sys.exit()
         
         # init data storage folder used by analyzer
@@ -44,12 +48,12 @@ class EmTaintAnalyzer():
     def init_data_storage(self):
         if not os.path.exists(self.ida_preprocess_dir):
             os.makedirs(self.ida_preprocess_dir)
-            print("Create ida processed dir: {}".format(self.ida_preprocess_dir))
+            logger.info("Create ida processed dir: {}".format(self.ida_preprocess_dir))
         
         # force to reanalyze, delete the old result
         if os.path.exists(self.result_dir):
             shutil.rmtree(self.result_dir)
-            print("Delete old analyze target result dir: {}".format(self.result_dir))
+            logger.info("Delete old analyze target result dir: {}".format(self.result_dir))
         os.makedirs(self.result_dir)
 
 
@@ -71,15 +75,15 @@ class EmTaintAnalyzer():
                 start = section.vaddr
                 end = section.vaddr + section.memsize
                 self.binary_info.sections[region_name] = (start, end)
-                print("Section: {}, start: {}, end: {}".format(region_name, hex(start), hex(end)))
+                logger.info("Section: {}, start: {}, end: {}".format(region_name, hex(start), hex(end)))
 
         min_addr, max_addr = self.proj.loader.min_addr, self.proj.loader.max_addr
         self.binary_info.sections['.loader'] = (min_addr, max_addr)
-        print("Section: {}, start: {}, end: {}".format('.loader', hex(min_addr), hex(max_addr)))
+        logger.info("Section: {}, start: {}, end: {}".format('.loader', hex(min_addr), hex(max_addr)))
         
         extern_obj = self.proj.loader.extern_object
         self.binary_info.sections['.extern'] = (extern_obj.min_addr, extern_obj.max_addr)
-        print("Section: {}, start: {}, end: {}".format('.extern', hex(extern_obj.min_addr), hex(extern_obj.max_addr)))
+        logger.info("Section: {}, start: {}, end: {}".format('.extern', hex(extern_obj.min_addr), hex(extern_obj.max_addr)))
 
 
     def run(self):
