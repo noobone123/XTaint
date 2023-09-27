@@ -16,13 +16,20 @@ class CallGraph(GraphBase):
 
         self._initialize_graph()
 
-    def add_node(self, node):
+    def add_node(self, node, type: str = None, hash = None):
         """
         Add a node to the graph.
+
+        * type: is an external function or an internal function.
         """
-        if node.addr not in self._nodes:
-            self._nodes[node.addr] = node
-            self.graph.add_node(node)
+        if type == 'external':
+            if hash not in self._nodes:
+                self._nodes[hash] = node
+                self.graph.add_node(node)
+        else:
+            if node.addr not in self._nodes:
+                self._nodes[node.addr] = node
+                self.graph.add_node(node)
 
     def get_node(self, addr):
         """
@@ -30,6 +37,12 @@ class CallGraph(GraphBase):
         """
         if addr in self._nodes:
             return self._nodes[addr]
+        
+    def add_edge(self, src, dst, **kwargs):
+        """
+        Add an edge to the graph.
+        """
+        self.graph.add_edge(src, dst, **kwargs)
 
     def get_all_callsites_to_function(self, function):
         """

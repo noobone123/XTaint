@@ -11,7 +11,7 @@ from .function_obj import FunctionObj
 from ..logger import get_logger
 
 logger = get_logger("BinFactory")
-logger.setLevel("INFO")
+logger.setLevel("DEBUG")
 
 class BinFactory(object):
     """
@@ -91,6 +91,8 @@ class BinFactory(object):
                 bb_obj = BasicBlock(bb_start, bb_end, func_ea)
                 self.cfg.add_node(bb_obj)
 
+                logger.debug("BasicBlock {} built".format(bb_obj))
+
             # build edges
             for edge in edges:
                 src_addr, dst_addr = edge[0] + self.base_addr, edge[1] + self.base_addr
@@ -101,6 +103,8 @@ class BinFactory(object):
                 dst_bb = self.cfg.get_node(dst_addr)
                 
                 self.cfg.add_edge(src_bb, dst_bb, kwargs = {'jumpkind': 'Boring'})
+
+                logger.debug("CFG Edges: {} -> {}".format(src_bb, dst_bb))
 
 
             # BUILD the CallGraph
@@ -115,7 +119,7 @@ class BinFactory(object):
             else:
                 caller_obj = self.cg.get_node(func_ea)
                 if caller_obj.procedural_name == None:
-                    raise Exception("Unresolved function name: {}".format(hex(func_ea)))
+                    caller_obj.procedural_name = func_name
             
             for call_info in calls:
                 bb_start, callsite, target = call_info
@@ -128,7 +132,33 @@ class BinFactory(object):
                 
                 src_bb = self.cfg.get_node(bb_start)
                 if src_bb is None:
-                    pass
+                    logger.error("Cannot find src_bb {} when building callgraph".format(hex(bb_start)))
+                src_bb.callsites[callsite] = target
 
+                # if target is an internal function
+                if type(target) == int:
+                    if target in self.cg._nodes:
+                        callee_obj = self.cg.get_node(target)
+                    else:
+                        callee_obj = FunctionObj(target)
+                        self.cg.add_node(callee_obj)
+                # if target is an external function
+                else:
+                    callee_name = target
+                    callee_name_hash = hash(callee_name)
+                    if callee_name_hash not in self.cg._nodes:
+                        callee_obj = FunctionObj(0, procedural_name = callee_name)
+                        self.cg.add_node(callee_obj, type = "external", hash = callee_name_hash)
+                
+                kwargs = {'jumpkind': 'Call'}
+                self.cg.add_edge(caller_obj, callee_obj, **kwargs)
+
+                # update caller_obj's callee info (exclude external functions)
+                if callee_obj.addr:
+                    if callee_obj.addr not in caller_obj.callees:
+                        caller_obj.callees[callee_obj.addr] = 0
+                    caller_obj.callees[callee_obj.addr] += 1
+                
+                logger.debug("CallGraph: {} -> {}".format(caller_obj, callee_obj))
         
         logger.info("Function CFG and CG built successfully.")
