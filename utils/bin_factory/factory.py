@@ -26,6 +26,8 @@ class BinFactory(object):
         self.angr_proj = angr_proj
         self.binary_info = binary_info
         self.base_addr = base_addr
+        self.cg = CallGraph()
+        self.cfg = CFG()
 
         callinfo_path = os.path.join(ida_preprocess_dir, 'callinfo.json')
         cfg_path = os.path.join(ida_preprocess_dir, 'cfg.json')
@@ -42,10 +44,6 @@ class BinFactory(object):
 
 
     def _build(self):
-        # initialize CFG and CallGraph
-        self.cg = CallGraph()
-        self.cfg = CFG()
-
         self.rebase_binary()
         self.fast_build()
 
