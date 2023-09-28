@@ -11,7 +11,7 @@ from .function_obj import FunctionObj
 from ..logger import get_logger
 
 logger = get_logger("BinFactory")
-logger.setLevel("DEBUG")
+logger.setLevel("INFO")
 
 class BinFactory(object):
     """
@@ -74,7 +74,7 @@ class BinFactory(object):
             edges = self.cfg_record[func]['control-flow']
             func_name = self.cfg_record[func]['name']
 
-            func_ea = int(func, 16) + self.base_addr
+            func_ea = int(func) + self.base_addr
             func_cnt += 1
 
             tail_calls = set()
@@ -149,6 +149,8 @@ class BinFactory(object):
                     if callee_name_hash not in self.cg._nodes:
                         callee_obj = FunctionObj(0, procedural_name = callee_name)
                         self.cg.add_node(callee_obj, type = "external", hash = callee_name_hash)
+                    else:
+                        callee_obj = self.cg.get_node(callee_name_hash)
                 
                 kwargs = {'jumpkind': 'Call'}
                 self.cg.add_edge(caller_obj, callee_obj, **kwargs)
