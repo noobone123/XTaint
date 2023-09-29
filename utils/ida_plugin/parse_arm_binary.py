@@ -255,7 +255,7 @@ def get_cfg_block_info():
     """
     Parse the binary and get each function's cfg and block info.
     """
-    cfg_record, callinfo_record, switch_record = {}, {}, {}
+    cfg_record, blockinfo_record, switch_record = {}, {}, {}
     for ea in funcs:
         func_info = {
             'block': [],
@@ -282,9 +282,9 @@ def get_cfg_block_info():
 
             # parse each block's instruction and get call info
             call_info = get_call_info(bb, func_info)
-            if ea not in callinfo_record.keys():
-                callinfo_record[ea] = {}
-            callinfo_record[ea][bb.start_ea] = call_info
+            if ea not in blockinfo_record.keys():
+                blockinfo_record[ea] = {}
+            blockinfo_record[ea][bb.start_ea] = call_info
 
             # find all non-pre and non-succ block (exclude case when function has only 1 bb)
             if len(list(bb.preds())) == 0 and len(list(bb.succs())) == 0 and \
@@ -317,7 +317,7 @@ def get_cfg_block_info():
         cfg_record[ea] = func_info
 
 
-    return cfg_record, callinfo_record, switch_record
+    return cfg_record, blockinfo_record, switch_record
 
 if __name__ == "__main__":
     file_name = ida_nalt.get_root_filename()
@@ -336,13 +336,13 @@ if __name__ == "__main__":
     sections, funcs = get_sections_func()
     jumptable_xref_info = get_jumptable_xref_info(funcs)
 
-    cfg_record, callinfo_record, switch_record = get_cfg_block_info()
+    cfg_record, blockinfo_record, switch_record = get_cfg_block_info()
 
     with open(os.path.join(preprocess_dir, f"cfg.json"), "w") as f:
         json.dump(cfg_record, f, indent=4)
     
-    with open(os.path.join(preprocess_dir, f"callinfo.json"), "w") as f:
-        json.dump(callinfo_record, f, indent=4)
+    with open(os.path.join(preprocess_dir, f"blockinfo.json"), "w") as f:
+        json.dump(blockinfo_record, f, indent=4)
     
     with open(os.path.join(preprocess_dir, f"switch.json"), "w") as f:
         json.dump(switch_record, f, indent=4)

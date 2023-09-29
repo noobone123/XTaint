@@ -75,7 +75,7 @@ def ida_preprocess(binary_path, ida_preprocess_dir, config):
         logger.info("Created idb file: %s" % idb_path)
     
     # if ida preprocess already done, skip
-    if os.path.exists(os.path.join(ida_preprocess_dir, "callinfo.json")) and \
+    if os.path.exists(os.path.join(ida_preprocess_dir, "blockinfo.json")) and \
         os.path.exists(os.path.join(ida_preprocess_dir, "cfg.json")) and \
         os.path.exists(os.path.join(ida_preprocess_dir, "switch.json")):
         logger.info("IDA preprocess already done!")

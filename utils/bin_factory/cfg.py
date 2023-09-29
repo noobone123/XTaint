@@ -4,6 +4,7 @@ import logging
 from collections import defaultdict
 from .graph_base import GraphBase
 from .callgraph import CallGraph
+from .basicblock import BasicBlock
 
 
 class CFG(GraphBase):
@@ -26,7 +27,7 @@ class CFG(GraphBase):
             self.graph.add_node(bb)
             self.addr_bb_map[bb.addr] = bb
 
-    def get_node(self, addr):
+    def get_node(self, addr) -> BasicBlock:
         """
         Get the node by the address
         """
