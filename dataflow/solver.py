@@ -84,10 +84,14 @@ class DataflowSolver():
                 # IMPORTANT: how to judge whether the function has taint sources?
                 has_taint_sources = self._has_taint_sources(cur_func)
 
-                if has_taint_sources:
-                    logger.info("Find taint sources in function {} at 0x{:x}".format(cur_func.procedural_name, cur_func.addr))
-                    self._pre_process_function(cur_func)
+                # get function's block info
+                function_block_info = self.bin_factory.blocks_info.get(cur_func.addr, None)
+                if function_block_info:
+                    logger.info(f"Block info found in function {cur_func.procedural_name}")
 
+                if has_taint_sources:
+                    logger.info("Taint sources found in function {} at 0x{:x}".format(cur_func.procedural_name, cur_func.addr))
+                    self._pre_process_function(cur_func)
 
 
     def _initial_lib_procedure(self):
