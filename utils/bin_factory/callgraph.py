@@ -1,8 +1,10 @@
 import logging
 
 from .graph_base import GraphBase
+from .function_obj import FunctionObj
 
-l = logging.getLogger("callgraph")
+logger = logging.getLogger("CallGraph")
+logger.setLevel("INFO")
 
 class CallGraph(GraphBase):
     """
@@ -43,6 +45,29 @@ class CallGraph(GraphBase):
         Add an edge to the graph.
         """
         self.graph.add_edge(src, dst, **kwargs)
+
+    def find_start_nodes(self):
+        """
+        Get the start function node. (`main` function or function with no in degree)
+        """
+        start_nodes = set()
+        # TODO: exclude start nodes ptr in .init_array and .fini_array
+        excluded_nodes_name = ['.init', '_start']
+
+        # TODO: this heuristic is not good, need to improve
+        # because I found CFG generated from ida is not good
+        for n in self.graph.nodes():
+            if n.procedural_name == 'main' or (n.addr > 0 and self.graph.in_degree(n) == 0):
+                if n.procedural_name not in excluded_nodes_name:
+                    logger.info("Found start function node: {}".format(n))
+                    start_nodes.add(n)
+
+        if len(start_nodes) == 0:
+            all_nodes = list(self.graph.nodes())
+            if len(all_nodes):
+                start_nodes.add(all_nodes[0])
+
+        return start_nodes
 
     def get_all_callsites_to_function(self, function):
         """
@@ -103,23 +128,6 @@ class CallGraph(GraphBase):
             if node in loop.body_nodes:
                 return loop
         return None
-
-    def get_start_nodes(self):
-        start_nodes = set()
-
-        for n in self.graph.nodes():
-            # print(n, n.binary_name)
-            # print(list(self.graph.predecessors(n)))
-            if n.binary_name == 'main' and n.addr > 0 and self.graph.in_degree(n) == 0:
-                # print("get-start-node: %s" % (n))
-                start_nodes.add(n)
-
-        if len(start_nodes) == 0:
-            all_nodes = list(self.graph.nodes())
-            if len(all_nodes):
-                start_nodes.add(all_nodes[0])
-
-        return start_nodes
 
     def get_all_nodes_by_root(self, root):
         """

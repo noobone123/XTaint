@@ -161,4 +161,8 @@ class BinFactory(object):
                 
                 logger.debug("CallGraph: {} -> {}".format(caller_obj, callee_obj))
         
+        # TODO: load indirect call info
+
         logger.info("Function CFG and CG built successfully.")
+        logger.info("Built {} internal functions".format(func_cnt))
+        logger.info("Built {} external functions".format(len(self.cg._nodes) - func_cnt))

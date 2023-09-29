@@ -9,6 +9,7 @@ import angr
 from utils.ida_plugin import ida_preprocess
 from utils.bin_factory import BinFactory, BinaryInfo
 from utils.logger import get_logger
+from dataflow.solver import DataflowSolver
 
 CONFIG = pathlib.Path(__file__).parent / "config.json"
 
@@ -100,6 +101,13 @@ class EmTaintAnalyzer():
                                  self.ida_preprocess_dir,
                                  self.binary_info)
         
+        # TODO: add start_func into args
+        start_func = ["sub_9858"]
+        dataflow_solver = DataflowSolver(self.proj,
+                                        bin_factory,
+                                        self.binary_info,
+                                        start_func)
+        dataflow_solver.solve()
 
 if __name__ == "__main__":
 
