@@ -1,7 +1,9 @@
 import logging
+import networkx
 
 from .graph_base import GraphBase
 from .function_obj import FunctionObj
+from .loop_finder import Loop
 
 logger = logging.getLogger("CallGraph")
 logger.setLevel("INFO")
@@ -60,14 +62,37 @@ class CallGraph(GraphBase):
             if n.procedural_name == 'main' or (n.addr > 0 and self.graph.in_degree(n) == 0):
                 if n.procedural_name not in excluded_nodes_name:
                     logger.info("Found start function node: {}".format(n))
-                    start_nodes.add(n)
+                    start_nodes.add(n.procedural_name)
 
         if len(start_nodes) == 0:
             all_nodes = list(self.graph.nodes())
             if len(all_nodes):
-                start_nodes.add(all_nodes[0])
+                start_nodes.add(n.procedural_name)
 
         return start_nodes
+
+    def get_all_nodes_by_root(self, root):
+        """
+        Get all nodes in the tree which root nood is given.
+        """
+        all_nodes = []
+        traversed_nodes = set()
+
+        all_nodes.append(root)
+        traversed_nodes.add(root)
+
+        stack = [root]
+        while stack:
+            node = stack.pop()
+            succ_nodes = self.graph.successors(node)
+            for succ_n in succ_nodes:
+                if succ_n.addr and succ_n not in traversed_nodes:
+                    all_nodes.append(succ_n)
+                    traversed_nodes.add(succ_n)
+                    stack.append(succ_n)
+
+        return all_nodes
+
 
     def get_all_callsites_to_function(self, function):
         """
@@ -80,7 +105,7 @@ class CallGraph(GraphBase):
         for pre_function in pre_functions:
             caller_sites = pre_function.callees.get(funcea)
             if caller_sites is None:
-                l.info("The function %s didn't call function %s, check it future!" % (pre_function, function))
+                logger.info("The function %s didn't call function %s, check it future!" % (pre_function, function))
                 continue
 
             for cs in caller_sites:
@@ -128,30 +153,6 @@ class CallGraph(GraphBase):
             if node in loop.body_nodes:
                 return loop
         return None
-
-    def get_all_nodes_by_root(self, root):
-        """
-        Get all nodes in the tree which root nood is given.
-        """
-        all_nodes = []
-        traversed_nodes = set()
-
-        all_nodes.append(root)
-        traversed_nodes.add(root)
-
-        stack = [root]
-        while stack:
-            node = stack.pop()
-            succ_nodes = self.graph.successors(node)
-            for succ_n in succ_nodes:
-                if succ_n.addr and succ_n not in traversed_nodes:
-                    all_nodes.append(succ_n)
-                    traversed_nodes.add(succ_n)
-                    stack.append(succ_n)
-
-                    # print("edge: %s -> %s" % (node, succ_n))
-
-        return all_nodes
 
     def _get_loop_callees(self, loop):
         loop_callees = set()

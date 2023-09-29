@@ -102,11 +102,15 @@ class EmTaintAnalyzer():
                                  self.binary_info)
         
         # TODO: add start_func into args
-        start_func = ["sub_9858"]
+        start_funcs_addr = [0x9858]
+        start_functions = []
+        for start_func_addr in start_funcs_addr:
+            start_functions.append(bin_factory.cg.get_node(start_func_addr))
+
         dataflow_solver = DataflowSolver(self.proj,
                                         bin_factory,
                                         self.binary_info,
-                                        start_func)
+                                        start_functions)
         dataflow_solver.solve()
 
 if __name__ == "__main__":

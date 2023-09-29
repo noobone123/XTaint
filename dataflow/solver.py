@@ -4,7 +4,7 @@ import time
 
 from typing import List, Dict, Tuple, Set
 
-from utils.bin_factory import BinaryInfo, BinFactory
+from utils.bin_factory import BinaryInfo, BinFactory, LoopFinder, FunctionObj
 
 logger = logging.getLogger("DataflowSolver")
 logger.setLevel("INFO")
@@ -13,11 +13,19 @@ class DataflowSolver():
     def __init__(self, proj: angr.Project,
                     bin_factory: BinFactory,
                     binary_info: BinaryInfo,
-                    start_func: List = []):
+                    start_functions: List[FunctionObj] = [],
+                    do_recursive_call: bool = False):
+        """
+        * do_recursive_call: whether add the recursive call loop's first node into the start_func
+        """
         self.proj = proj
         self.bin_factory = bin_factory
         self.binary_info = binary_info
-        self.start_func = start_func
+        self.start_functions = start_functions
+        self.loop_finder = LoopFinder()
+
+        # initial the solver config
+        self.do_recursive_call = do_recursive_call
 
     def solve(self):
         """
@@ -35,10 +43,35 @@ class DataflowSolver():
         """
         Solve the dataflow of the binary.
         """
-        if not self.start_func:
-            start_function = self.bin_factory.cg.get_start_nodes()
+        # get the start function
+        if not self.start_functions:
+            self.start_functions = self.bin_factory.cg.find_start_nodes()
         else:
-            logger.info("Start function: {}".format(self.start_func))
+            logger.info("Start function: {}".format(self.start_functions))
+
+        # add the recursive call loop's first node into the start_func (if needed)
+        if self.do_recursive_call:
+            # get loops in the binary
+            self.loop_finder.get_loops_from_call_graph(self.bin_factory.cg)
+            for call_loop in self.bin_factory.cg.loops:
+                if len(call_loop.start_nodes) == 0:
+                    self.start_functions.add(call_loop.first_node)
+
+
+        analyzed_function = set()
+        for func in self.start_functions:
+            logger.info("Solving function {} at 0x{:x}".format(func.procedural_name, func.addr))
+
+            # initialize the worklist, add all the successors of the functions into the worklist
+            # using wide-first search, first add all the 1-hop successors, then 2-hop, 3-hop, ...
+            # IMPORTANT: worklist's update algorithm ...
+            worklist = []
+            tree_nodes = self.bin_factory.cg.get_all_nodes_by_root(func)
+            self.bin_factory.cg.get_pre_sequence_call_graph(func, tree_nodes, worklist)
+
+            
+
+
 
     def _initial_lib_procedure(self):
         """
