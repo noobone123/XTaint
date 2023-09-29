@@ -93,6 +93,11 @@ class DataflowSolver():
                     logger.info("Taint sources found in function {} at 0x{:x}".format(cur_func.procedural_name, cur_func.addr))
                     self._pre_process_function(cur_func)
 
+                # IMPORTANT: On Demand Analysis, if function has no taint sources, then skip it
+                elif cur_func.cfg == None:
+                    logger.warning("CFG not found in function {} at 0x{:x}".format(cur_func.procedural_name, cur_func.addr))
+                    continue
+
 
     def _initial_lib_procedure(self):
         """
