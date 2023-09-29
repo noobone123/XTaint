@@ -35,7 +35,7 @@ class CallGraph(GraphBase):
                 self._nodes[node.addr] = node
                 self.graph.add_node(node)
 
-    def get_node(self, addr):
+    def get_node(self, addr) -> FunctionObj:
         """
         get a function node by addr
         """

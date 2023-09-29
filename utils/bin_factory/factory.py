@@ -1,6 +1,6 @@
 import os
 import json
-from typing import Any
+from typing import Any, Dict, List, Tuple, Set
 import angr
 
 from .callgraph import CallGraph
@@ -27,7 +27,7 @@ class BinFactory(object):
         self.binary_info = binary_info
         self.base_addr = base_addr
         self.cg = CallGraph()
-        self.cfg = CFG()
+        self.func_cfg: Dict[int, CFG] = {}
 
         block_info_path = os.path.join(ida_preprocess_dir, 'blockinfo.json')
         cfg_path = os.path.join(ida_preprocess_dir, 'cfg.json')
@@ -80,6 +80,9 @@ class BinFactory(object):
             func_name = self.cfg_record[func]['name']
 
             func_ea = int(func) + self.base_addr
+            func_cfg = CFG()
+            self.func_cfg[func_ea] = func_cfg
+
             func_cnt += 1
 
             tail_calls = set()
@@ -94,7 +97,7 @@ class BinFactory(object):
                     continue
 
                 bb_obj = BasicBlock(bb_start, bb_end, func_ea)
-                self.cfg.add_node(bb_obj)
+                func_cfg.add_node(bb_obj)
 
                 logger.debug("BasicBlock {} built".format(bb_obj))
 
@@ -104,10 +107,10 @@ class BinFactory(object):
                 if dst_addr in tail_calls:
                     continue
                 
-                src_bb = self.cfg.get_node(src_addr)
-                dst_bb = self.cfg.get_node(dst_addr)
+                src_bb = func_cfg.get_node(src_addr)
+                dst_bb = func_cfg.get_node(dst_addr)
                 
-                self.cfg.add_edge(src_bb, dst_bb, kwargs = {'jumpkind': 'Boring'})
+                func_cfg.add_edge(src_bb, dst_bb, kwargs = {'jumpkind': 'Boring'})
 
                 logger.debug("CFG Edges: {} -> {}".format(src_bb, dst_bb))
 
@@ -117,7 +120,7 @@ class BinFactory(object):
             if func_ea not in self.cg._nodes:
                 caller_obj = FunctionObj(
                     func_ea,
-                    procedural_name = func_name,
+                    procedural_name = func_name
                 )
                 self.cg.add_node(caller_obj)
                 pass
@@ -135,7 +138,7 @@ class BinFactory(object):
                 if type(target) == int:
                     target = target + self.base_addr
                 
-                src_bb = self.cfg.get_node(bb_start)
+                src_bb = func_cfg.get_node(bb_start)
                 if src_bb is None:
                     logger.error("Cannot find src_bb {} when building callgraph".format(hex(bb_start)))
                 src_bb.callsites[callsite] = target
@@ -170,12 +173,29 @@ class BinFactory(object):
         
         # TODO: load indirect call info
 
+        # add CFG into CallGraph's nodes
+        for func_ea, func_cfg in self.func_cfg.items():
+            func_obj = self.cg.get_node(func_ea)
+            if func_obj:
+                func_obj.cfg = func_cfg
+
         logger.info("Function CFG and CG built successfully.")
         logger.info("Built {} internal functions".format(func_cnt))
         logger.info("Built {} external functions".format(len(self.cg._nodes) - func_cnt))
 
         self.blocks_info = self.collect_blocks_info()
         logger.info("Blocks info collected successfully.")
+
+
+    def get_bb_by_addr(self, addr):
+        """ 
+        Get the basic block by the address.
+        """
+        for func_cfg in self.func_cfg.values():
+            bb = func_cfg.get_node(addr)
+            if bb:
+                return bb
+        return None
 
     def collect_blocks_info(self):
         """
@@ -195,10 +215,10 @@ class BinFactory(object):
                 # if block_info is [], just continue
                 if not block_infos:
                     continue
-                
+
                 bb_addr = int(u_bb_addr)
 
-                bb = self.cfg.get_node(bb_addr + self.base_addr)
+                bb = self.get_bb_by_addr(bb_addr + self.base_addr)
                 if bb is None:
                     logger.warning(f"The block {hex(bb_addr)} not in existing blocks!!!")
                     continue

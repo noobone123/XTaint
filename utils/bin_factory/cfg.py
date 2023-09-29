@@ -16,6 +16,7 @@ class CFG(GraphBase):
         super(CFG, self).__init__()
 
         self.addr_bb_map = {}
+        self.preprocessed = False
 
         self._initialize_graph()
 

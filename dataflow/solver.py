@@ -74,6 +74,7 @@ class DataflowSolver():
             tree_nodes = self.bin_factory.cg.get_all_nodes_by_root(func)
             self.bin_factory.cg.get_pre_sequence_call_graph(func, tree_nodes, worklist)
 
+            # consume the worklist
             for i in range(len(worklist) - 1, -1, -1):
                 cur_func = worklist[i]
                 logger.info("Analyzing function {} at 0x{:x}".format(cur_func.procedural_name, cur_func.addr))
@@ -119,4 +120,5 @@ class DataflowSolver():
         return False
     
     def _pre_process_function(self, function):
-        pass
+        logger.info("Pre-processing function {} at 0x{:x}".format(function.procedural_name, function.addr))
+        
