@@ -5,7 +5,7 @@ import time
 from typing import List, Dict, Tuple, Set
 
 from utils.bin_factory import BinaryInfo, BinFactory, LoopFinder, FunctionObj
-from dataflow.model import DataFlowCFG, CFGBase, CFGBlock
+from dataflow.model import DataFlowCFG, CFGBase, DataflowBlock
 
 logger = logging.getLogger("DataflowSolver")
 logger.setLevel("INFO")
@@ -141,3 +141,4 @@ class DataflowSolver():
         
         # IMPORTANT: generate dataflow cfg, maybe we need to combine dataflow cfg and binary factory cfg
         dataflow_cfg = DataFlowCFG(func_ea, self.bin_factory, self.proj)
+        dataflow_cfg.generate_function_cfg(function, start_blocks)

@@ -1,4 +1,8 @@
-class CFGBlock(object):
+class DataflowBlock(object):
+    """
+    This block is different from the basic block in IDA Pro.
+    This is actually built from irsb in VEX.
+    """
     def __init__(self, addr,
                  cfg,
                  target=0,
@@ -94,7 +98,7 @@ class CFGBlock(object):
             return "<Block 0x%x->%s (0x%x)>" % (self.addr, self.target, self.func_addr)
 
     def __eq__(self, other):
-        if not isinstance(other, CFGBlock):
+        if not isinstance(other, DataflowBlock):
             return False
         return (self.addr == other.addr and self.target == other.target)
 
@@ -135,7 +139,7 @@ class CFGBlock(object):
                   (fe, fe.expr.flag, fe.constraints, fe.expr.ptr_id, fe.expr.source, fe.expr.data_type, fe.expr.alias_id))
 
     def shallow_copy(self):
-        new_block = CFGBlock(self.addr, target=self.target, irsb=self.irsb, func_addr=self.func_addr, node_type=self.node_type)
+        new_block = DataflowBlock(self.addr, target=self.target, irsb=self.irsb, func_addr=self.func_addr, node_type=self.node_type)
         return new_block
 
     def collect_completed_exprs(self, expr):
