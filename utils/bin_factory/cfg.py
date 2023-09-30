@@ -3,7 +3,6 @@ import logging
 
 from collections import defaultdict
 from .graph_base import GraphBase
-from .callgraph import CallGraph
 from .basicblock import BasicBlock
 
 
@@ -16,7 +15,6 @@ class CFG(GraphBase):
         super(CFG, self).__init__()
 
         self.addr_bb_map = {}
-        self.preprocessed = False
 
         self._initialize_graph()
 

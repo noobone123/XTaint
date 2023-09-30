@@ -1,3 +1,4 @@
+from .cfg import CFG
 
 class FunctionObj(object):
     """
@@ -6,7 +7,7 @@ class FunctionObj(object):
     def __init__(self, addr, 
                  procedural_name = None, 
                  start_node = None, 
-                 cfg = None):
+                 cfg: CFG = None):
         
         self.addr = addr
         self.procedural_name = procedural_name
@@ -17,7 +18,11 @@ class FunctionObj(object):
         # Record the times each callee is called. callee_addr: num
         self.callees = {}
 
+        self.preprocessed = False
         self.cfg = cfg
+
+        self.dataflow_cfg = None
+
         self.graph_parser = None
 
         self.inc_locations = set()

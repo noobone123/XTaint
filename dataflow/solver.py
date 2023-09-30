@@ -5,6 +5,7 @@ import time
 from typing import List, Dict, Tuple, Set
 
 from utils.bin_factory import BinaryInfo, BinFactory, LoopFinder, FunctionObj
+from dataflow.model import DataFlowCFG, CFGBase, CFGBlock
 
 logger = logging.getLogger("DataflowSolver")
 logger.setLevel("INFO")
@@ -119,6 +120,24 @@ class DataflowSolver():
                 return True
         return False
     
-    def _pre_process_function(self, function):
-        logger.info("Pre-processing function {} at 0x{:x}".format(function.procedural_name, function.addr))
+    def _pre_process_function(self, function: FunctionObj):
+        """
+        Not all functions need to run dataflow analysis, for functions 
+        that needs to run dataflow analysis, we need to pre-process them.
+        """        
+        if function.preprocessed == True:
+            logger.info("Function {} at 0x{:x} has been pre-processed".format(function.procedural_name, function.addr))
+            return
+        else:
+            logger.info("Pre-processing function {} at 0x{:x}".format(function.procedural_name, function.addr))
+
+        func_ea = function.addr
         
+        start_blocks = self.bin_factory.func_cfg[func_ea].find_function_start_ida_block(func_ea, self.bin_factory.base_addr)
+
+        if len(start_blocks) == 0:
+            logger.warning("No start block found in function {} at 0x{:x}".format(function.procedural_name, function.addr))
+            return
+        
+        # IMPORTANT: generate dataflow cfg, maybe we need to combine dataflow cfg and binary factory cfg
+        dataflow_cfg = DataFlowCFG(func_ea, self.bin_factory, self.proj)
