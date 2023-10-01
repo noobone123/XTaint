@@ -6,6 +6,7 @@ from typing import List, Dict, Tuple, Set
 
 from utils.bin_factory import BinaryInfo, BinFactory, LoopFinder, FunctionObj
 from dataflow.model import DataFlowCFG, CFGBase, DataflowBlock
+from dataflow.core import FastDataFlow, AccurateDataFlow, CodeLocation, Action, EngineVEX
 
 logger = logging.getLogger("DataflowSolver")
 logger.setLevel("INFO")
@@ -15,6 +16,8 @@ class DataflowSolver():
                     bin_factory: BinFactory,
                     binary_info: BinaryInfo,
                     start_functions: List[FunctionObj] = [],
+                    fast_dataflow: FastDataFlow = None,
+                    accurate_dataflow: AccurateDataFlow = None,
                     do_recursive_call: bool = False):
         """
         * do_recursive_call: whether add the recursive call loop's first node into the start_func
@@ -23,6 +26,10 @@ class DataflowSolver():
         self.bin_factory = bin_factory
         self.binary_info = binary_info
         self.start_functions = start_functions
+
+        self._fast_dataflow = fast_dataflow
+        self._accurate_dataflow = accurate_dataflow
+
         self.loop_finder = LoopFinder()
 
         # initialize the solver config
@@ -246,60 +253,60 @@ class DataflowSolver():
         # IMPORTANT: initialize the function register and stack definitions
         self._initial_stack_in_function_start(function)
 
-        for block in pre_sequence_nodes:
-            if block in analyzed_blocks:
-                continue
+        # for block in pre_sequence_nodes:
+        #     if block in analyzed_blocks:
+        #         continue
 
-            if block.is_loop:
-                loop = function.determine_node_in_loop(block)
-                for block in loop.body_nodes:
-                    if block in analyzed_blocks:
-                        continue
+        #     if block.is_loop:
+        #         loop = function.determine_node_in_loop(block)
+        #         for block in loop.body_nodes:
+        #             if block in analyzed_blocks:
+        #                 continue
 
-                    analyzed_blocks.add(block)
-                    if block.irsb:
-                        self._accurate_dataflow.execute_block_irsb_v4(function, block, function_reg_defs, function_stack_defs, arguments)
+        #             analyzed_blocks.add(block)
+        #             if block.irsb:
+        #                 self._accurate_dataflow.execute_block_irsb_v4(function, block, function_reg_defs, function_stack_defs, arguments)
 
-                    else:
-                        if block.node_type in ['Call', 'iCall', 'Extern']:
-                            self._execute_callsite_node(function, block)
-                            # self._execute_libc_callee_to_infer_type(function, block)
+        #             else:
+        #                 if block.node_type in ['Call', 'iCall', 'Extern']:
+        #                     self._execute_callsite_node(function, block)
+        #                     # self._execute_libc_callee_to_infer_type(function, block)
 
-                    backward_trace_variable_type(function, block)
-                    # function.sort_arguments()
-                    # self._transfer_live_definitions(block, function)
-                    self._accurate_dataflow.transfer_live_definitions(block)
+        #             backward_trace_variable_type(function, block)
+        #             # function.sort_arguments()
+        #             # self._transfer_live_definitions(block, function)
+        #             self._accurate_dataflow.transfer_live_definitions(block)
 
-                if loop not in analyzed_loops:
-                    # print("Fast-analyze-loop: %s" % (loop))
-                    analyzed_loops.add(loop)
-                    ddg_graph = self._fast_dataflow.execute_loop(loop)
-                    self._fast_dataflow.label_loop_variables(function, ddg_graph)
+        #         if loop not in analyzed_loops:
+        #             # print("Fast-analyze-loop: %s" % (loop))
+        #             analyzed_loops.add(loop)
+        #             ddg_graph = self._fast_dataflow.execute_loop(loop)
+        #             self._fast_dataflow.label_loop_variables(function, ddg_graph)
 
-            else:
-                analyzed_blocks.add(block)
-                if block.irsb:
-                    self._accurate_dataflow.execute_block_irsb_v4(function, block, function_reg_defs, function_stack_defs, arguments)
+        #     else:
+        #         analyzed_blocks.add(block)
+        #         if block.irsb:
+        #             self._accurate_dataflow.execute_block_irsb_v4(function, block, function_reg_defs, function_stack_defs, arguments)
 
-                else:
-                    if block.node_type in ['Call', 'iCall', 'Extern']:
-                        self._execute_callsite_node(function, block)
-                        # self._execute_libc_callee_to_infer_type(function, block)
+        #         else:
+        #             if block.node_type in ['Call', 'iCall', 'Extern']:
+        #                 self._execute_callsite_node(function, block)
+        #                 # self._execute_libc_callee_to_infer_type(function, block)
 
-                backward_trace_variable_type(function, block)
-                # function.sort_arguments()
-                # self._transfer_live_definitions(block, function)
-                self._accurate_dataflow.transfer_live_definitions(block)
+        #         backward_trace_variable_type(function, block)
+        #         # function.sort_arguments()
+        #         # self._transfer_live_definitions(block, function)
+        #         self._accurate_dataflow.transfer_live_definitions(block)
 
-        function.correct_arguments()
+        # function.correct_arguments()
 
-        # for block in function.cfg.graph.nodes():
-        #     print("vex-text: %s" % (block))
-        #     for var, at in block.live_defs.items():
-        #         print("%s  %s" % (var, at))
+        # # for block in function.cfg.graph.nodes():
+        # #     print("vex-text: %s" % (block))
+        # #     for var, at in block.live_defs.items():
+        # #         print("%s  %s" % (var, at))
 
 
-    def _initial_stack_in_function_start(self, function):
+    def _initial_stack_in_function_start(self, function: FunctionObj):
         """
         Initalize the function's stack and register when the function starts.
         """

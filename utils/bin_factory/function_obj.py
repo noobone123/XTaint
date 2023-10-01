@@ -1,5 +1,5 @@
 from .cfg import CFG
-from dataflow.model import DataFlowCFG
+from dataflow.model import DataFlowCFG, DataflowBlock
 
 class FunctionObj(object):
     """
@@ -12,7 +12,7 @@ class FunctionObj(object):
         
         self.addr = addr
         self.procedural_name = procedural_name
-        self.start_node = start_node
+        self.start_node: DataflowBlock = start_node
         self.start_nodes = None
 
         # loops in the dataflow cfg of this function. Which is a List of Loop object.

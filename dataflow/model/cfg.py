@@ -5,8 +5,6 @@ from collections import defaultdict
 from .cfg_node import DataflowBlock
 from .cfg_base import CFGBase
 
-from utils.bin_factory import CFG, CallGraph, BinFactory
-
 import logging
 logger = logging.getLogger("Dataflow_CFG")
 logger.setLevel('INFO')
@@ -14,7 +12,7 @@ logger.setLevel('INFO')
 
 class DataFlowCFG(CFGBase):
     def __init__(self, addr, 
-                bin_factory: BinFactory, 
+                bin_factory, 
                 project: angr.Project):
 
         super(DataFlowCFG, self).__init__()

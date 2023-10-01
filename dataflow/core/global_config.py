@@ -74,7 +74,6 @@ def initialize_global_config(proj):
             start = section.vaddr
             end = start + section.memsize
             section_regions[region_name] = (start, end)
-            print("section: %s %x - %x" % (region_name, start, end))
 
     min_addr, max_addr = proj.loader.min_addr, proj.loader.max_addr
     # if min_addr < 0x400000:

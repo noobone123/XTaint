@@ -184,10 +184,8 @@ class EngineVEX(BinaryInfo):
     def __init__(self, project):
 
         super(EngineVEX, self).__init__(project)
-
+        
         self.insignificant_symbol = BVS('o')
-        # self.state = self.proj.factory.blank_state()
-        # self.solver = claripy.Solver()
 
     def _get_branch_conditoin(self, block, stmt, live_defs):
 

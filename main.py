@@ -11,6 +11,9 @@ from utils.bin_factory import BinFactory, BinaryInfo
 from utils.logger import get_logger
 from dataflow.solver import DataflowSolver
 from dataflow.config import Config
+from dataflow.core import FastDataFlow
+from dataflow.core import AccurateDataFlow
+from dataflow.core import global_config
 
 CONFIG = pathlib.Path(__file__).parent / "config.json"
 
@@ -97,6 +100,9 @@ class EmTaintAnalyzer():
         self.proj = angr.Project(self.binary_filepath)
         self.binary_info = BinaryInfo(self.proj)
         self.init_binary_sections()
+
+        # initialize global config related to archinfo
+        global_config.initialize_global_config(self.proj)
         
         bin_factory = BinFactory(self.proj, 
                                  self.ida_preprocess_dir,
@@ -111,13 +117,18 @@ class EmTaintAnalyzer():
         
         # add config used in dataflow solver
         custom_config = Config()
-        fast_dataflow = 
-        accurate_dataflow = 
+        fast_dataflow = FastDataFlow(self.proj, loop_execute_times = 3, summary_loop = True)
+        accurate_dataflow = AccurateDataFlow(
+            self.proj, bin_factory.cg,
+            config=custom_config
+        )
 
         dataflow_solver = DataflowSolver(self.proj,
                                         bin_factory,
                                         self.binary_info,
-                                        start_functions)
+                                        start_functions,
+                                        fast_dataflow,
+                                        accurate_dataflow)
         dataflow_solver.solve()
 
 if __name__ == "__main__":

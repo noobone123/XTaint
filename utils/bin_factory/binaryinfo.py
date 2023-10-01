@@ -1,12 +1,13 @@
 import claripy
+import angr
 
 class BinaryInfo(object):
 
-    def __init__(self, project):
+    def __init__(self, project: angr.project):
         """
         * project: angr project
         """
-        self.proj = project
+        self.proj: angr.Project = project
 
         self.sections = {}
         self.state = self.proj.factory.blank_state()
