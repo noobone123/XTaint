@@ -142,3 +142,6 @@ class DataflowSolver():
         # IMPORTANT: generate dataflow cfg, maybe we need to combine dataflow cfg and binary factory cfg
         dataflow_cfg = DataFlowCFG(func_ea, self.bin_factory, self.proj)
         dataflow_cfg.generate_function_cfg(function, start_blocks)
+
+        # dataflow_cfg.print_cfg_edges()
+        # dataflow_cfg.print_cfg()

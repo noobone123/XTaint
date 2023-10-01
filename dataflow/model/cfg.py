@@ -59,11 +59,15 @@ class DataFlowCFG(CFGBase):
 
             self._translate_build_irsb(ida_block, funcea)
 
-            jumpkind, exit_node = self._add_irsb_edges_to_cfg(ida_block)
+            jumpkind, exit_node = self._update_irsb_to_cfg(ida_block)
+
+            # almost impossible
             if exit_node is None:
+                logger.warning("Exit node is None!")
                 continue
 
             self.graph.add_node(exit_node)
+            logger.debug(f"Added node {exit_node} to Dataflow_CFG")
 
             # out edges of the current ida basic block
             out_edges = func_cfg.graph.out_edges(ida_block)
@@ -148,6 +152,9 @@ class DataFlowCFG(CFGBase):
 
             try:
                 # IMPORTANT: Get the VEX bb from the slicing_addr.
+                # I found that a irsb may have multiple instructions, so angr's irsb is different from ida's bb.
+                # An ida's bb may have mulitple irsb.
+                # size is the maximum size of the angr's irsb
                 irsb = self.proj.factory.block(slicing_addr, size = slicing_size).vex
 
                 if irsb.instructions == 0 and 'MIPS' in self.proj.arch.name:
@@ -157,7 +164,6 @@ class DataFlowCFG(CFGBase):
                 if irsb.jumpkind == 'Ijk_NoDecode':
                     raise Exception("No decode!")
 
-                # irsb.pp()
                 irsbs.append(irsb)
                 irsb_size += irsb.size
                 slicing_addr = block_start + irsb_size
@@ -166,7 +172,7 @@ class DataFlowCFG(CFGBase):
             except:
                 logger.info("We couldn't translate addr %x to vex!" % (slicing_addr))
                 break
-
+        
         return irsbs
 
     def _translate_build_irsb(self, ida_block, funcea):
@@ -183,7 +189,7 @@ class DataFlowCFG(CFGBase):
         irsbs = self._block_slicing(bb_start, bb_end)
 
         if len(irsbs) == 0:
-            logger.info("IDA block %s has no irsb, error." % (ida_block))
+            logger.error("IDA block %s has no irsb, error." % (ida_block))
             # exit(0)
 
         for irsb in irsbs:
@@ -196,12 +202,19 @@ class DataFlowCFG(CFGBase):
             # DataFlowCFG's node is add here
             self._nodes[irsb_addr] = block_node
             ida_block.contain_blocks.append(block_node)
-            # irsb.pp()
+            
+            # following is for debugging, change the funcea to see the debug log of the function you want
+            if funcea == 0x15a34:
+                logger.debug(f"Add irsb {irsb} in address {hex(irsb_addr)} with node type {block_node.node_type} in function {hex(funcea)}")
 
-    def _add_irsb_edges_to_cfg(self, ida_block):
+    def _update_irsb_to_cfg(self, ida_block):
         """
         Add edges into DataflowCFG.
         There is 3 jump kind, including Boring, Ijk_Call, Ijk_Ret.
+
+        DataflowBlock create here is a dummy node which represents the callee's block (with no irsb)
+        And there is an edge from the callsite's block to this dummy callee's block, and also an edge
+        from this dummy callee's block to return block.
         """
 
         callsites = ida_block.callsites
@@ -212,11 +225,13 @@ class DataFlowCFG(CFGBase):
         nodes_len = len(nodes)
 
         for i, irsb_node in enumerate(nodes):
-            callsite_addr, target = self._check_has_caller(irsb_node, callsites)
+            # if current irsb_node contains callsites
+            callsite_addr, target = self._check_has_callsite(irsb_node, callsites)
 
             # if there is a call in the current irsb
             if callsite_addr:
-                callsite_node = irsb_node
+                bb_with_callsite = irsb_node
+                logger.debug("Callsite node is %s" % bb_with_callsite)
                 # this is the callsite's return node
                 ret_node = nodes[i+1] if i < nodes_len-1 else None
 
@@ -228,27 +243,30 @@ class DataFlowCFG(CFGBase):
                 # If callee is an internal function
                 if isinstance(target, int):
                     callee_addr = target + self.bin_factory.base_addr
+                    # IMPORTANT: This target node does not have irsb
                     target_node = DataflowBlock(callsite_addr, self, target = callee_addr, func_addr = self.addr, node_type = 'Call')
                     self.callees[callee_addr].append(target_node)
                     self.callsites[target_node.__hash__()] = target_node
-
+                    logger.debug("Target node is %s" % (target_node))
                 # If callee is an external function
                 else:
                     target_name = str(target)
+                    # IMPORTANT: This target node does not have irsb
                     target_node = DataflowBlock(callsite_addr, self, target = target_name, func_addr = self.addr, node_type = 'Extern')
                     self.callees[target_name].append(target_node)
+                    logger.debug("Target node is %s" % (target_node))
 
                 self._nodes[callsite_addr] = target_node
 
                 kwargs = {'jumpkind': 'Ijk_Call'}
-                callsite_node.jumpkind = 'Ijk_Call'
+                bb_with_callsite.jumpkind = 'Ijk_Call'
                 # IMPORTANT: look like add a edge to the call's target node
-                self.graph.add_edge(callsite_node, target_node, **kwargs)
-                callsite_node.has_callsite = 1
+                self.graph.add_edge(bb_with_callsite, target_node, **kwargs)
+                bb_with_callsite.has_callsite = 1
                 # print("Add-edge-1: %s -> %s" % (callsite_node, target_node))
 
                 if ret_node is None:
-                    return ('call', callsite_node)
+                    return ('call', bb_with_callsite)
 
                 else:
                     kwargs = {'jumpkind': 'Ret'}
@@ -262,7 +280,7 @@ class DataFlowCFG(CFGBase):
                 if i < nodes_len - 1:
                     kwargs = {'jumpkind': 'Boring'}
                     irsb_node.jumpkind = 'Boring'
-                    self.graph.add_edge(irsb_node, nodes[i+1])
+                    self.graph.add_edge(irsb_node, nodes[i+1], **kwargs)
 
                 else:
                     # last irsb in the ida's basic block
@@ -328,14 +346,11 @@ class DataFlowCFG(CFGBase):
 
         return callsite_node, ret_node
 
-    def _check_has_caller(self, irsb_node, callsites):
+    def _check_has_callsite(self, irsb_node, callsites):
 
         for addr, target in callsites.items():
-
-            # rebase_addr = addr+self.ida_object.base_addr
-            rebase_addr = addr
-            if irsb_node.addr <= rebase_addr < irsb_node.end:
-                return rebase_addr, target
+            if irsb_node.addr <= addr < irsb_node.end:
+                return addr, target
 
         return None, None
 
@@ -345,7 +360,7 @@ class DataFlowCFG(CFGBase):
 
     def print_cfg_edges(self):
         for src, dst in self.graph.edges():
-            print("%s -> %s" % (src, dst))
+            print("%s ---%s---> %s" % (src, self.graph[src][dst]['jumpkind'], dst))
 
     def _add_edge(self, src, dst, jumpkind):
         """
