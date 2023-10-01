@@ -177,7 +177,7 @@ class BinFactory(object):
         for func_ea, func_cfg in self.func_cfg.items():
             func_obj = self.cg.get_node(func_ea)
             if func_obj:
-                func_obj.cfg = func_cfg
+                func_obj.dataflow_cfg = func_cfg
 
         logger.info("Function CFG and CG built successfully.")
         logger.info("Built {} internal functions".format(func_cnt))

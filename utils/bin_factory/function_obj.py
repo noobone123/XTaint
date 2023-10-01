@@ -1,4 +1,5 @@
 from .cfg import CFG
+from dataflow.model import DataFlowCFG
 
 class FunctionObj(object):
     """
@@ -7,21 +8,21 @@ class FunctionObj(object):
     def __init__(self, addr, 
                  procedural_name = None, 
                  start_node = None, 
-                 cfg: CFG = None):
+                 cfg: DataFlowCFG = None):
         
         self.addr = addr
         self.procedural_name = procedural_name
         self.start_node = start_node
         self.start_nodes = None
+
+        # loops in the dataflow cfg of this function. Which is a List of Loop object.
         self.loops = []
 
         # Record the times each callee is called. callee_addr: num
         self.callees = {}
 
         self.preprocessed = False
-        self.cfg = cfg
-
-        self.dataflow_cfg = None
+        self.dataflow_cfg = cfg
 
         self.graph_parser = None
 
@@ -86,7 +87,7 @@ class FunctionObj(object):
         """
         Get a CFG block in function.cfg.graph by addr.
         """
-        return self.cfg.get_node_by_addr(addr)
+        return self.dataflow_cfg.get_node_by_addr(addr)
 
     def determine_node_in_loop(self, node):
         """
@@ -248,7 +249,7 @@ class FunctionObj(object):
             return True
 
         self.start_nodes = start_nodes
-        pre_sequence_nodes = self.cfg.pre_sequence_nodes
+        pre_sequence_nodes = self.dataflow_cfg.pre_sequence_nodes
         traversed_nodes = set()
         for s_node in start_nodes:
             pre_sequence_nodes.append(s_node)
@@ -261,7 +262,7 @@ class FunctionObj(object):
         while worklist:
             block = worklist.pop()
             # print("worklist- %s" % (block))
-            succ_blocks = self.cfg.graph.successors(block)
+            succ_blocks = self.dataflow_cfg.graph.successors(block)
             for succ_block in succ_blocks:
                 # print("psu-debug: %s has succ %s %s" % (block, succ_block, succ_block.is_loop))
                 if succ_block.is_loop:
@@ -272,7 +273,7 @@ class FunctionObj(object):
 
                     # print("psu-debug: analyze loop %s" % (loop))
                     # analyzed_loops.append(loop)
-                    choosed = _should_add_loop(self.cfg, loop, pre_sequence_nodes)
+                    choosed = _should_add_loop(self.dataflow_cfg, loop, pre_sequence_nodes)
                     # print("loop %s %s, choosed %s" % (succ_block, loop, choosed))
                     if choosed:
                         analyzed_loops.append(loop)
@@ -291,7 +292,7 @@ class FunctionObj(object):
                 else:
                     choosed = True
                     # pre_blocks = cfg.graph.predecessors(succ_block)
-                    in_edges = self.cfg.graph.in_edges(succ_block)
+                    in_edges = self.dataflow_cfg.graph.in_edges(succ_block)
                     if len(in_edges) >= 2:
                         for pre_block, _ in in_edges:
                             if pre_block not in pre_sequence_nodes:

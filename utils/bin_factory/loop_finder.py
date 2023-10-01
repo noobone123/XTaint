@@ -1,6 +1,8 @@
 import networkx
 from collections import defaultdict
 
+from .function_obj import FunctionObj
+
 import logging
 logger = logging.getLogger("loopfinder")
 logger.setLevel("INFO")
@@ -73,19 +75,14 @@ class LoopFinder(object):
                 if len(ins):
                     loop.start_nodes.append(node)
 
-    def get_loops_from_graph(self, function):
+    def get_loops_from_dataflowCFG(self, function: FunctionObj):
         """
         Return all Loop instances that can be extracted from a graph.
         """
-        cfg = function.cfg
+        cfg = function.dataflow_cfg
         graph = cfg.graph
         sub_graphs = []
 
-        # print("Get loops in function: %s" % (function))
-        # for node in graph.nodes():
-        #     print("cfg node: %s" % (node))
-
-        # for subg in networkx.strongly_connected_component_subgraphs(graph):
         for subg in (networkx.induced_subgraph(graph, nodes).copy() for nodes in networkx.strongly_connected_components(graph)):
             if len(subg.nodes()) == 1:
                 if len(list(subg.successors(list(subg.nodes())[0]))) == 0:

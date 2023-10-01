@@ -96,7 +96,7 @@ class DataflowSolver():
                     self._pre_process_function(cur_func)
 
                 # IMPORTANT: On Demand Analysis, if function has no taint sources, then skip it
-                elif cur_func.cfg == None:
+                elif cur_func.dataflow_cfg == None:
                     logger.warning("CFG not found in function {} at 0x{:x}".format(cur_func.procedural_name, cur_func.addr))
                     continue
 
@@ -143,5 +143,177 @@ class DataflowSolver():
         dataflow_cfg = DataFlowCFG(func_ea, self.bin_factory, self.proj)
         dataflow_cfg.generate_function_cfg(function, start_blocks)
 
+        function.dataflow_cfg = dataflow_cfg
+        function.start_node = dataflow_cfg._nodes[func_ea]
+
+        self.loop_finder.get_loops_from_dataflowCFG(function)
+
+        if len(function.dataflow_cfg.pre_sequence_nodes) == 0:
+            pre_sequence_nodes = self._get_pre_sequence_in_function(function)
+            function.dataflow_cfg.pre_sequence_nodes = pre_sequence_nodes
+            self._pre_process_function_vex(function)
+
         # dataflow_cfg.print_cfg_edges()
         # dataflow_cfg.print_cfg()
+
+
+    def _get_pre_sequence_in_function(self, function: FunctionObj):
+        """
+        flatten the function's dataflow bb into a sequence.
+        """
+        pre_sequence_nodes = []
+
+        def _should_add_loop(cfg, loop, pre_sequence_nodes):
+            # print("add_loop %s" % (pre_sequence_nodes))
+            for s_node in loop.start_nodes:
+                in_nodes = cfg.graph.predecessors(s_node)
+                # print(in_nodes)
+                for in_node in in_nodes:
+                    if in_node not in pre_sequence_nodes and in_node not in loop.body_nodes:
+                        return False
+            return True
+
+        cfg = function.dataflow_cfg
+        start_node = function.start_node
+        pre_sequence_nodes.append(start_node)
+        traversed_nodes = set()
+        traversed_nodes.add(start_node)
+
+        analyzed_loops = []
+        worklist = [start_node]
+        while worklist:
+            block = worklist.pop()
+            succ_blocks = cfg.graph.successors(block)
+            for succ_block in succ_blocks:
+                # print("psu-debug: %s has succ %s %s" % (block, succ_block, succ_block.is_loop))
+                if succ_block.is_loop:
+                    loop = function.determine_node_in_loop(succ_block)
+                    if loop in analyzed_loops:
+                        continue
+
+                    # print("psu-debug: analyze loop %s" % (loop))
+                    # analyzed_loops.append(loop)
+                    choosed = _should_add_loop(cfg, loop, pre_sequence_nodes)
+                    # print("loop %s %s, choosed %s" % (succ_block, loop, choosed))
+                    if choosed:
+                        analyzed_loops.append(loop)
+                        for n in loop.start_nodes:
+                            if n not in traversed_nodes:
+                                pre_sequence_nodes.append(n)
+                                traversed_nodes.add(n)
+                        for n in loop.end_nodes:
+                            if n not in traversed_nodes:
+                                pre_sequence_nodes.append(n)
+                                traversed_nodes.add(n)
+                        # pre_sequence_nodes.extend(loop.start_nodes)
+                        # pre_sequence_nodes.extend(loop.end_nodes)
+                        worklist.extend(loop.end_nodes)
+
+                else:
+                    choosed = True
+                    # pre_blocks = cfg.graph.predecessors(succ_block)
+                    in_edges = cfg.graph.in_edges(succ_block)
+                    if len(in_edges) >= 2:
+                        for pre_block, _ in in_edges:
+                            if pre_block not in pre_sequence_nodes:
+                                choosed = False
+                                break
+                    if choosed:
+                        # if succ_block.addr == 0x2bc5db:
+                        #     print("add succ node %s" % (succ_block))
+                        #     print("block %s, pre blocks %s" % (block, pre_blocks))
+                        if succ_block not in traversed_nodes:
+                            pre_sequence_nodes.append(succ_block)
+                            worklist.append(succ_block)
+                            # print("node %s has in sequence" % (succ_block))
+                            traversed_nodes.add(succ_block)
+
+        # print("Function: %s get sequences:\n %s" % (function, pre_sequence_nodes))
+        return pre_sequence_nodes
+    
+
+    def _pre_process_function_vex(self, function: FunctionObj):
+
+        function_reg_defs = {}
+        function_stack_defs = {}
+        analyzed_blocks = set()
+        analyzed_loops = set()
+        pre_sequence_nodes = function.dataflow_cfg.pre_sequence_nodes
+        arguments = function.arguments
+
+        print("\npsu-debug: sequence %s\n" % (pre_sequence_nodes))
+
+        # IMPORTANT: initialize the function register and stack definitions
+        self._initial_stack_in_function_start(function)
+
+        for block in pre_sequence_nodes:
+            if block in analyzed_blocks:
+                continue
+
+            if block.is_loop:
+                loop = function.determine_node_in_loop(block)
+                for block in loop.body_nodes:
+                    if block in analyzed_blocks:
+                        continue
+
+                    analyzed_blocks.add(block)
+                    if block.irsb:
+                        self._accurate_dataflow.execute_block_irsb_v4(function, block, function_reg_defs, function_stack_defs, arguments)
+
+                    else:
+                        if block.node_type in ['Call', 'iCall', 'Extern']:
+                            self._execute_callsite_node(function, block)
+                            # self._execute_libc_callee_to_infer_type(function, block)
+
+                    backward_trace_variable_type(function, block)
+                    # function.sort_arguments()
+                    # self._transfer_live_definitions(block, function)
+                    self._accurate_dataflow.transfer_live_definitions(block)
+
+                if loop not in analyzed_loops:
+                    # print("Fast-analyze-loop: %s" % (loop))
+                    analyzed_loops.add(loop)
+                    ddg_graph = self._fast_dataflow.execute_loop(loop)
+                    self._fast_dataflow.label_loop_variables(function, ddg_graph)
+
+            else:
+                analyzed_blocks.add(block)
+                if block.irsb:
+                    self._accurate_dataflow.execute_block_irsb_v4(function, block, function_reg_defs, function_stack_defs, arguments)
+
+                else:
+                    if block.node_type in ['Call', 'iCall', 'Extern']:
+                        self._execute_callsite_node(function, block)
+                        # self._execute_libc_callee_to_infer_type(function, block)
+
+                backward_trace_variable_type(function, block)
+                # function.sort_arguments()
+                # self._transfer_live_definitions(block, function)
+                self._accurate_dataflow.transfer_live_definitions(block)
+
+        function.correct_arguments()
+
+        # for block in function.cfg.graph.nodes():
+        #     print("vex-text: %s" % (block))
+        #     for var, at in block.live_defs.items():
+        #         print("%s  %s" % (var, at))
+
+
+    def _initial_stack_in_function_start(self, function):
+        """
+        Initalize the function's stack and register when the function starts.
+        """
+        stack_reg = self._accurate_dataflow.sp_name
+        arch_bits = self._accurate_dataflow.arch_bits
+        start_block = function.start_node
+        loc = CodeLocation(start_block.addr, 0)
+        initial_action = Action('w', loc, stack_reg, stack_reg, arch_bits)
+        initial_action.value = 0x7fffffff
+        initial_action.src_type = 'S'
+        initial_action.var_type = 'ptr'
+        start_block.live_defs[stack_reg] = initial_action
+
+        if self.proj.arch.name in ['MIPS64', 'MIPS32']:
+            reg_offset = self.proj.arch.registers['t9'][0]
+            value = function.addr
+            self._initial_reg_value(start_block, reg_offset, value, 'ptr', 'G')

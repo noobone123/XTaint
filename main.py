@@ -10,6 +10,7 @@ from utils.ida_plugin import ida_preprocess
 from utils.bin_factory import BinFactory, BinaryInfo
 from utils.logger import get_logger
 from dataflow.solver import DataflowSolver
+from dataflow.config import Config
 
 CONFIG = pathlib.Path(__file__).parent / "config.json"
 
@@ -106,6 +107,12 @@ class EmTaintAnalyzer():
         start_functions = []
         for start_func_addr in start_funcs_addr:
             start_functions.append(bin_factory.cg.get_node(start_func_addr))
+
+        
+        # add config used in dataflow solver
+        custom_config = Config()
+        fast_dataflow = 
+        accurate_dataflow = 
 
         dataflow_solver = DataflowSolver(self.proj,
                                         bin_factory,
