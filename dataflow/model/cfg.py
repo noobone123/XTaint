@@ -2,10 +2,12 @@
 import angr
 import json
 from collections import defaultdict
+from typing import List, Dict, Set, Tuple, Optional, Union
 from .cfg_node import DataflowBlock
 from .cfg_base import CFGBase
 
 import logging
+
 logger = logging.getLogger("Dataflow_CFG")
 logger.setLevel('INFO')
 
@@ -23,7 +25,7 @@ class DataFlowCFG(CFGBase):
 
         self._nodes = {}
         self.callsites = {}
-        self.pre_sequence_nodes = []
+        self.pre_sequence_nodes: List[DataflowBlock] = []
         self.callees = defaultdict(list)
         self.exit_blocks = set()
 

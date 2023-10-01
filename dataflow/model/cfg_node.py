@@ -1,3 +1,5 @@
+from pyvex import IRSB
+
 class DataflowBlock(object):
     """
     This block is different from the basic block in IDA Pro.
@@ -13,7 +15,7 @@ class DataflowBlock(object):
         self.addr = addr
         self._cfg = cfg
         self.target = target
-        self.irsb = irsb
+        self.irsb:IRSB = irsb
         self.func_addr = func_addr
         self.node_type = node_type
 
@@ -51,7 +53,8 @@ class DataflowBlock(object):
 
         self.constraints = []
         self.jump_guard = None
-        self.guard = {}
+
+        self.guard = {} # key: block addr, value: guard expr (conditions)
 
         self.taint_constraints = {}
 

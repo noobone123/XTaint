@@ -1,7 +1,7 @@
 #!/usr/bin/env python
 
 from .parse_ast import *
-from .global_config import *
+from ..global_config import *
 
 import logging
 l = logging.getLogger("variable_type")

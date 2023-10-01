@@ -3,6 +3,8 @@ class CodeLocation(object):
     """
     Stands for a specific program point by specifying basic block address 
     and statement ID (for IRSBs), or SimProcedure name (for SimProcedures).
+
+    looks like that each stmt (excluding the IMark and IExit) of IRSB has an unique CodeLocation
     """
     
     def __init__(self, block_addr, stmt_idx, sim_procedure=None, ins_addr=None, unique_id=0, **kwargs):

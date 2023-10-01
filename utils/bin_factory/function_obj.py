@@ -1,5 +1,6 @@
 from .cfg import CFG
 from dataflow.model import DataFlowCFG, DataflowBlock
+from dataflow.global_config import default_arg_names
 
 class FunctionObj(object):
     """
@@ -438,3 +439,23 @@ class FunctionObj(object):
             else:
                 self.taint_exprs.append(definition_expr)
                 # print("set-callee-def-context: %x %s" % (self.addr, definition_expr))
+
+    def correct_arguments(self):
+        """
+        Some identified arguments are error, correct them.
+        """
+        # first_arg = default_arg_names[0]
+        # if first_arg not in self.arguments:
+        #     self.arguments.clear()
+
+        arg_max = -1
+        for i, default_arg in enumerate(default_arg_names):
+            if default_arg in self.arguments:
+                arg_max = i
+                break
+
+        for i, default_arg in enumerate(default_arg_names):
+            if i > arg_max:
+                break
+            if default_arg not in self.arguments:
+                self.arguments.append(default_arg)

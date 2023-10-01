@@ -2,7 +2,7 @@ import re
 import claripy
 import logging
 
-from .global_config import section_regions
+from ..global_config import section_regions
 from .parse_ast import *
 from .variable_type import get_expr_base_ptr
 from .code_location import CodeLocation

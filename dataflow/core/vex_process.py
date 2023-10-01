@@ -5,15 +5,17 @@ import claripy
 import networkx
 from collections import defaultdict
 from pyvex.const import get_type_size
+from pyvex import IRSB, stmt
 
-from utils.bin_factory import BinaryInfo
+from utils.bin_factory import BinaryInfo, FunctionObj
 from .irop import translate
 from .variable_expression import VarExpr, TraceExpr, SimAction, Sim
 # from .vex.statements import translate_stmt
 from .parse_ast import *
 from .code_location import CodeLocation
-from .global_config import basic_types, arch_info
+from ..global_config import basic_types, arch_info
 from .variable_type import *
+from ..model import DataflowBlock, DataFlowCFG
 
 from dataflow.utils.errors import NoSupportVEXExpr, NoSupportType
 
@@ -188,13 +190,18 @@ class EngineVEX(BinaryInfo):
         self.insignificant_symbol = BVS('o')
 
     def _get_branch_conditoin(self, block, stmt, live_defs):
-
         target = 0
         guard = None
+
+        # stmt.dst is the jump target here.
         dst_tag = stmt.dst.tag
+
+        # if dst_tag is a constant
         if 'Ico' in dst_tag:
+            # target is the jump target
             target = stmt.dst.value
 
+        # looks like, guard is the condition here?
         if target and hasattr(stmt, 'guard') and isinstance(stmt.guard, pyvex.expr.RdTmp):
             guard_tmp = 't%d' % stmt.guard.tmp
             guard_at = live_defs[guard_tmp]
@@ -253,7 +260,7 @@ class EngineVEX(BinaryInfo):
                 # true_guard = slt_guard != 0
                 # false_guard = slt_guard == 0
 
-            # print("guard-ast: %s ture- %s false- %s" % (guard_ast, true_guard, false_guard))
+            # IMPORTANT: update the condition guard of the successor blocks
             for succ_block in block.successors:
                 if succ_block.addr == target:
                     succ_block.guard[block.addr] = true_guard
@@ -580,10 +587,10 @@ class EngineVEX(BinaryInfo):
         return value
 
     def translate_loadg_expr(self, vex_expr):
-        if vex_expr.tag is 'Iex_Const':
+        if vex_expr.tag == 'Iex_Const':
             return vex_expr.con.value
 
-        elif vex_expr.tag is 'Iex_RdTmp':
+        elif vex_expr.tag == 'Iex_RdTmp':
             return 't%d' % (vex_expr.tmp)
 
         else:
@@ -902,15 +909,16 @@ class EngineVEX(BinaryInfo):
                 old_at.src = wr_src
             # print("old-action (new): %s" % (old_at))
 
-    def execute_block_irsb_v4(self, function, block, function_reg_defs, function_stack_defs, arguments):
+    def execute_block_irsb(self, function: FunctionObj, block: DataflowBlock, 
+                           function_reg_defs, function_stack_defs, arguments):
+        """
+        
+        """
         irsb = block.irsb
         if irsb is None:
             return
 
-        # irsb.pp()
-
         block_addr = block.addr
-        # loop_flag = block.is_loop
 
         block_actions = block.actions
         block_code_locations = block.code_locations
@@ -920,22 +928,29 @@ class EngineVEX(BinaryInfo):
 
         tyenv = irsb.tyenv
         stmts = irsb.statements
-        # print("--> %s %s" % (block, block.node_type))
 
         count = 0
         last_ins = False
-        call_flag = False
-        # if block.node_type in ['Call', 'Extern', 'iCall']:
+
+        call_flag = False   # if current irsb has a callsite
+
+        # if current irsb has a callsite
         if irsb.jumpkind == 'Ijk_Call':
             call_flag = True
-            instructions = irsb.instructions
+            instructions = irsb.instructions    # the number of assembly instructions in current irsb
 
         special_ins_flag, mips_lwr_flag = 0, 0
         vex_ins_start = 0
         ins_addr = None
+
         for index, stmt in enumerate(stmts):
-            # print("%s %s" % (index, stmt))
-            if stmt.tag is 'Ist_IMark':
+            # iterate each statements in irsb
+
+            # if stmt is like `------ IMark(0x1b444, 4, 0) ------``
+            # An instruction mark. It marks the start of the statements that represent a single machine instruction 
+            # (the end of those statements is marked by the next IMark or the end of the IRSB). 
+            # Contains the address and length of the instruction.
+            if stmt.tag == 'Ist_IMark':
                 ins_addr = stmt.addr
                 vex_ins_num = index - vex_ins_start
                 # print("xxx-vex-num: %d %d" % (vex_ins_num, special_ins_flag))
@@ -954,21 +969,25 @@ class EngineVEX(BinaryInfo):
                 mips_lwr_flag = 0
                 vex_ins_start = index
 
-            elif stmt.tag is 'Ist_Exit':
-                # The block will exit.
-                # print("Exit: %s-%x" % (stmt, block_addr))
+            # A conditional exit from the middle of an IRSB.
+            # like: if (t30) { PUT(offset=68) = 0x1b414; Ijk_Boring }
+            elif stmt.tag == 'Ist_Exit':
+                # IMPORTANT: how to get the branch condition, why to get the branch condition?
                 self._get_branch_conditoin(block, stmt, live_defs)
 
+                # if not mips, current bb will exit.
                 if 'MIPS' not in self.proj.arch.name:
                     break
 
-            code_location = CodeLocation(block_addr, index, ins_addr=ins_addr)
+            code_location = CodeLocation(block_addr, index, ins_addr = ins_addr)
             # print("\nstmt in %s %s" % (code_location, stmt))
 
             if call_flag:
-                if stmt.tag is 'Ist_IMark':
+                if stmt.tag == 'Ist_IMark':
                     count += 1
                     if count == instructions:
+                        # if current irsb has callsite, and current stmt is the last stmt in current irsb
+                        # in most cases, last stmt is `PUT(ret_reg) = xxxx`
                         last_ins = True
 
                 # print("count: %d ins: %d" % (count, instructions))
@@ -981,10 +1000,12 @@ class EngineVEX(BinaryInfo):
                 elif (last_ins and isinstance(stmt, pyvex.stmt.Put) and
                         stmt.offset == self.sp_offset):
                     continue
-
-            # l.info("stmt in %s" % (code_location))
-            action = self._pre_process_statement_v4(function, block, stmt, code_location, tyenv, reg_defs, live_defs, live_uses, function_reg_defs, function_stack_defs, arguments)
-            # print(action)
+            
+            # IMPORTANT: why to preprocess the stmts? How to preprocess the stmts? get what info?
+            action = self._pre_process_statement_v4(function, block, stmt, 
+                                                    code_location, tyenv, 
+                                                    reg_defs, live_defs, live_uses, 
+                                                    function_reg_defs, function_stack_defs, arguments)
 
             if action:
                 if action.action_type == 'wo':
@@ -1016,13 +1037,15 @@ class EngineVEX(BinaryInfo):
         #     print("%s : %s" % (v, str(d_info)))
         # print("Global-addrs: %s" % (function.global_addrs))
 
-    def _pre_process_statement_v4(self, function, block, stmt, code_location, tyenv, reg_defs, live_defs, live_uses, function_reg_defs, function_stack_defs, arguments):
+    def _pre_process_statement_v4(self, function: FunctionObj, block: DataflowBlock, stmt: stmt, code_location: CodeLocation, 
+                                  tyenv, reg_defs, live_defs, live_uses, function_reg_defs, function_stack_defs, arguments):
         """
         pre process a stmt, and get the stmt's info.
         """
-        at = None
+        
+        import ipdb; ipdb.set_trace()
 
-        # print("psu-debug: %s %s %s" % (code_location, stmt, stmt.tag))
+        at = None
 
         if isinstance(stmt, pyvex.stmt.Store):
 
@@ -1440,7 +1463,7 @@ class EngineVEX(BinaryInfo):
                     src = 't%d' % (stmt_data.tmp)
                     live_defs[dst] = live_defs[src]
 
-                elif isinstance(stmt_data, pyvex.expr.Get):
+                elif isinstance(stmt_data, pyvex.expr.Get):     # e.g. t0 = GET:I32(offset=60) 
                     src = 'r%d' % (stmt_data.offset)
                     at = Action(wr_type, code_location, dst, src, wr_size)
 
@@ -1566,7 +1589,7 @@ class EngineVEX(BinaryInfo):
                 return None
 
         # t35 = if (t80) ILGop_Ident32(LDle(t45)) else t27
-        elif stmt.tag is 'Ist_LoadG':
+        elif stmt.tag == 'Ist_LoadG':
             dst = 't%d' % (stmt.dst)
             l_addr = self.translate_loadg_expr(stmt.addr)
             alt = self.translate_loadg_expr(stmt.alt)
@@ -1657,7 +1680,7 @@ class EngineVEX(BinaryInfo):
             # print("\n+++++++++++++++\n%s\n" % (at))
 
         # if (t82) STle(t68) = t35
-        elif stmt.tag is 'Ist_StoreG':
+        elif stmt.tag == 'Ist_StoreG':
             guard = self.translate_loadg_expr(stmt.guard)
 
             stmt_data = stmt.data
@@ -1733,6 +1756,7 @@ class EngineVEX(BinaryInfo):
             # print("\n+++++++++++++++\n%s\n" % (at))
 
         else:
+            # ------ IMark(0x19ba0, 4, 0) ------ will also be translated to None
             l.debug("Not support: %s %s %s" % (code_location, stmt, stmt.tag))
             if hasattr(stmt, 'tmp'):
                 dst = 't%d' %(stmt.tmp)

@@ -248,62 +248,71 @@ class DataflowSolver():
         pre_sequence_nodes = function.dataflow_cfg.pre_sequence_nodes
         arguments = function.arguments
 
-        print("\npsu-debug: sequence %s\n" % (pre_sequence_nodes))
-
         # IMPORTANT: initialize the function register and stack definitions
         self._initial_stack_in_function_start(function)
 
-        # for block in pre_sequence_nodes:
-        #     if block in analyzed_blocks:
-        #         continue
+        # iterating ...
+        for block in pre_sequence_nodes:
 
-        #     if block.is_loop:
-        #         loop = function.determine_node_in_loop(block)
-        #         for block in loop.body_nodes:
-        #             if block in analyzed_blocks:
-        #                 continue
+            # if block already analyzed, then skip it
+            if block in analyzed_blocks:
+                continue
+            
+            # if block is not a loop
+            if not block.is_loop:
+                analyzed_blocks.add(block)
 
-        #             analyzed_blocks.add(block)
-        #             if block.irsb:
-        #                 self._accurate_dataflow.execute_block_irsb_v4(function, block, function_reg_defs, function_stack_defs, arguments)
+                # only callee dummy node dost not have irsb
+                if block.irsb:
+                    self._accurate_dataflow.execute_block_irsb(
+                        function, block, 
+                        function_reg_defs, function_stack_defs, 
+                        arguments
+                    )
 
-        #             else:
-        #                 if block.node_type in ['Call', 'iCall', 'Extern']:
-        #                     self._execute_callsite_node(function, block)
-        #                     # self._execute_libc_callee_to_infer_type(function, block)
+            #     else:
+            #         if block.node_type in ['Call', 'iCall', 'Extern']:
+            #             self._execute_callsite_node(function, block)
+            #             # self._execute_libc_callee_to_infer_type(function, block)
 
-        #             backward_trace_variable_type(function, block)
-        #             # function.sort_arguments()
-        #             # self._transfer_live_definitions(block, function)
-        #             self._accurate_dataflow.transfer_live_definitions(block)
+            #     backward_trace_variable_type(function, block)
+            #     # function.sort_arguments()
+            #     # self._transfer_live_definitions(block, function)
+            #     self._accurate_dataflow.transfer_live_definitions(block)
 
-        #         if loop not in analyzed_loops:
-        #             # print("Fast-analyze-loop: %s" % (loop))
-        #             analyzed_loops.add(loop)
-        #             ddg_graph = self._fast_dataflow.execute_loop(loop)
-        #             self._fast_dataflow.label_loop_variables(function, ddg_graph)
+            # # if block is in a loop
+            # else:
+            #     loop = function.determine_node_in_loop(block)
+            #     for block in loop.body_nodes:
+            #         if block in analyzed_blocks:
+            #             continue
 
-        #     else:
-        #         analyzed_blocks.add(block)
-        #         if block.irsb:
-        #             self._accurate_dataflow.execute_block_irsb_v4(function, block, function_reg_defs, function_stack_defs, arguments)
+            #         analyzed_blocks.add(block)
+            #         if block.irsb:
+            #             self._accurate_dataflow.execute_block_irsb(function, block, function_reg_defs, function_stack_defs, arguments)
 
-        #         else:
-        #             if block.node_type in ['Call', 'iCall', 'Extern']:
-        #                 self._execute_callsite_node(function, block)
-        #                 # self._execute_libc_callee_to_infer_type(function, block)
+            #         else:
+            #             if block.node_type in ['Call', 'iCall', 'Extern']:
+            #                 self._execute_callsite_node(function, block)
+            #                 # self._execute_libc_callee_to_infer_type(function, block)
 
-        #         backward_trace_variable_type(function, block)
-        #         # function.sort_arguments()
-        #         # self._transfer_live_definitions(block, function)
-        #         self._accurate_dataflow.transfer_live_definitions(block)
+            #         backward_trace_variable_type(function, block)
+            #         # function.sort_arguments()
+            #         # self._transfer_live_definitions(block, function)
+            #         self._accurate_dataflow.transfer_live_definitions(block)
 
-        # function.correct_arguments()
+            #     if loop not in analyzed_loops:
+            #         # print("Fast-analyze-loop: %s" % (loop))
+            #         analyzed_loops.add(loop)
+            #         ddg_graph = self._fast_dataflow.execute_loop(loop)
+            #         self._fast_dataflow.label_loop_variables(function, ddg_graph)
 
-        # # for block in function.cfg.graph.nodes():
-        # #     print("vex-text: %s" % (block))
-        # #     for var, at in block.live_defs.items():
-        # #         print("%s  %s" % (var, at))
+        function.correct_arguments()
+
+        # for block in function.cfg.graph.nodes():
+        #     print("vex-text: %s" % (block))
+        #     for var, at in block.live_defs.items():
+        #         print("%s  %s" % (var, at))
 
 
     def _initial_stack_in_function_start(self, function: FunctionObj):
@@ -313,14 +322,31 @@ class DataflowSolver():
         stack_reg = self._accurate_dataflow.sp_name
         arch_bits = self._accurate_dataflow.arch_bits
         start_block = function.start_node
+
+        # IMPORTANT: what is CodeLocation and Action?
         loc = CodeLocation(start_block.addr, 0)
         initial_action = Action('w', loc, stack_reg, stack_reg, arch_bits)
         initial_action.value = 0x7fffffff
         initial_action.src_type = 'S'
         initial_action.var_type = 'ptr'
+
+        # IMPORTANT: what is live_defs? 
         start_block.live_defs[stack_reg] = initial_action
 
         if self.proj.arch.name in ['MIPS64', 'MIPS32']:
             reg_offset = self.proj.arch.registers['t9'][0]
             value = function.addr
             self._initial_reg_value(start_block, reg_offset, value, 'ptr', 'G')
+
+
+    def _initial_reg_value(self, block, reg_offset, value, var_type, src_type):
+        """
+        Initial register value for mips. because mips does not have bp?
+        """
+        reg_name = 'r%d' % (reg_offset)
+        loc = CodeLocation(block.addr, 0)
+        initial_action = Action('w', loc, reg_name, reg_name, self.arch_bits)
+        initial_action.value = value
+        initial_action.src_type = src_type
+        initial_action.var_type = var_type
+        block.live_defs[reg_name] = initial_action
