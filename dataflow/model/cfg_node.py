@@ -26,17 +26,17 @@ class DataflowBlock(object):
         # self.sp_tmp_offset = None
         self.stack_tmps = set()
 
-        self.actions = {}
+        self.actions = {}   # IMPORTANT
         self.code_locations = []
-        self.live_defs = {}
+        self.live_defs = {} # IMPORTANT
         self.live_uses = {}
         self.live_stores = {}
         self.tmp_info = {}
-        self.reg_defs = {}
+        self.reg_defs = {}  # IMPORTANT
 
-        self.f_reg_alias = {}
-        self.b_reg_alias = {}
-        self.tmp_alias = {}
+        self.f_reg_alias = {}  # IMPORTANT
+        self.b_reg_alias = {}  # IMPORTANT
+        self.tmp_alias = {}  # IMPORTANT
 
         self.stack_registers = {}
 
@@ -54,7 +54,7 @@ class DataflowBlock(object):
         self.constraints = []
         self.jump_guard = None
 
-        self.guard = {} # key: block addr, value: guard expr (conditions)
+        self.guard = {} # IMPORTANT: key: block addr, value: guard expr (conditions)
 
         self.taint_constraints = {}
 
@@ -92,13 +92,13 @@ class DataflowBlock(object):
     def __repr__(self):
         if isinstance(self.target, int):
             if self.target:
-                return "<Block 0x%x->0x%x (0x%x)>" % (self.addr, self.target, self.func_addr)
+                return "<DataflowBlock 0x%x->0x%x (0x%x)>" % (self.addr, self.target, self.func_addr)
 
             else:
-                return "<Block 0x%x (0x%x)>" % (self.addr, self.func_addr)
+                return "<DataflowBlock 0x%x (0x%x)>" % (self.addr, self.func_addr)
 
         elif isinstance(self.target, str):
-            return "<Block 0x%x->%s (0x%x)>" % (self.addr, self.target, self.func_addr)
+            return "<DataflowBlock 0x%x->%s (0x%x)>" % (self.addr, self.target, self.func_addr)
 
     def __eq__(self, other):
         if not isinstance(other, DataflowBlock):

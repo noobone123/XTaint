@@ -16,7 +16,7 @@ class BasicBlock():
         return self.bb_start
 
     def __repr__(self):
-        return "<Block 0x%x (0x%x, 0x%x)>" % (self.funcea, self.addr, self.bb_end)
+        return "<IDABlock 0x%x (0x%x, 0x%x)>" % (self.funcea, self.addr, self.bb_end)
 
     def __eq__(self, other):
         if not isinstance(other, BasicBlock):

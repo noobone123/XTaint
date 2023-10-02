@@ -26,27 +26,27 @@ l.setLevel('INFO')
 
 choose_register = True
 
-choose_action_types = ['w', 'wo', 'p', 'wu', 'wn']
+choose_action_types = ['w', 'wo', 'p', 'wu', 'wn']  # `w`: write action, `wo`: write action with operator ?
 
 
 class Action(object):
 
     def __init__(self, action_type, code_location, dst, src, var_size):
 
-        self.action_type = action_type
+        self.action_type = action_type  # `s`: store
         self.code_location = code_location
         self.dst = dst
         self.src = src
         self.var_size = var_size
 
-        self.dst_alias = None
-        self.src_alias = None
+        self.dst_alias = None   # for store stmt, we concern about the dst alias (which alias will be changed by the store stmt)
+        self.src_alias = None   # for load stmt, we concern about the src alias (which alias will be used to load the value)
         self.addr_value = None
         self.value = None
 
         self.argument = None
 
-        # Label the definition's right src type (S, G, H, I, etc.)
+        # Label the definition's right src type (S, G, H, I, etc.)  S: stack, G: global, H: heap, I: immediate, see function `get_value_label`, self.proj.arch.argument_registers
         self.src_type = None
         # Label the store/load addr's type (S, G, H, I, etc.)
         self.addr_type = None
@@ -909,8 +909,7 @@ class EngineVEX(BinaryInfo):
                 old_at.src = wr_src
             # print("old-action (new): %s" % (old_at))
 
-    def execute_block_irsb(self, function: FunctionObj, block: DataflowBlock, 
-                           function_reg_defs, function_stack_defs, arguments):
+    def execute_block_irsb(self, function: FunctionObj, block: DataflowBlock, arguments):
         """
         
         """
@@ -1002,10 +1001,9 @@ class EngineVEX(BinaryInfo):
                     continue
             
             # IMPORTANT: why to preprocess the stmts? How to preprocess the stmts? get what info?
-            action = self._pre_process_statement_v4(function, block, stmt, 
+            action = self._pre_process_statement(function, block, stmt, 
                                                     code_location, tyenv, 
-                                                    reg_defs, live_defs, live_uses, 
-                                                    function_reg_defs, function_stack_defs, arguments)
+                                                    reg_defs, live_defs, arguments)
 
             if action:
                 if action.action_type == 'wo':
@@ -1032,19 +1030,12 @@ class EngineVEX(BinaryInfo):
 
         self._summary_register_def_info(block, live_defs, reg_defs)
 
-        # print("\npsu-debug: block %s %s\n" % (block, block.node_type))
-        # for v, d_info in live_defs.items():
-        #     print("%s : %s" % (v, str(d_info)))
-        # print("Global-addrs: %s" % (function.global_addrs))
 
-    def _pre_process_statement_v4(self, function: FunctionObj, block: DataflowBlock, stmt: stmt, code_location: CodeLocation, 
-                                  tyenv, reg_defs, live_defs, live_uses, function_reg_defs, function_stack_defs, arguments):
+    def _pre_process_statement(self, function: FunctionObj, block: DataflowBlock, stmt: stmt, code_location: CodeLocation, 
+                                  tyenv, reg_defs, live_defs, arguments):
         """
         pre process a stmt, and get the stmt's info.
         """
-        
-        import ipdb; ipdb.set_trace()
-
         at = None
 
         if isinstance(stmt, pyvex.stmt.Store):
@@ -1274,7 +1265,7 @@ class EngineVEX(BinaryInfo):
                             opnd_type = basic_types[opnd_size]
                         opnds_type.append(opnd_type)
                         opnd_at = live_defs[opnd]
-                        if opnd_at.action_type in ['w', 'p', 'wu', 'wn']:
+                        if opnd_at.action_type in ['w', 'p', 'wu', 'wn']:   # if operand's live action(last) is write, e.g. rsi(last) = rdi, so current rdi is alias of rsi, and current rsi's alias should ... 
                             # o_alias = opnd_at.src_alias if type(opnd_at.src_alias) is str else opnd_at.src
                             if type(opnd_at.src_alias) is str:
                                 o_alias = opnd_at.src_alias
@@ -1459,7 +1450,7 @@ class EngineVEX(BinaryInfo):
             else:
                 wr_type = 'w'
 
-                if isinstance(stmt_data, pyvex.expr.RdTmp):
+                if isinstance(stmt_data, pyvex.expr.RdTmp):     # e.g. t0 = t1
                     src = 't%d' % (stmt_data.tmp)
                     live_defs[dst] = live_defs[src]
 
@@ -1481,8 +1472,8 @@ class EngineVEX(BinaryInfo):
                             at.src_locs = 0
                         at.argument = src_at.argument
 
-                    elif src in self.argument_vars:
-                        at.src_type = 'A'
+                    elif src in self.argument_vars:     # if current register is arguments of current function
+                        at.src_type = 'A'   # src_type: A means argument
                         at.src_locs = 0
 
                         loc = CodeLocation(block.addr, 0)
@@ -1530,7 +1521,7 @@ class EngineVEX(BinaryInfo):
                     at = Action('none', code_location, dst, None, wr_size)
                     live_defs[dst] = at
 
-        elif isinstance(stmt, pyvex.stmt.Put):
+        elif isinstance(stmt, pyvex.stmt.Put):  # e.g. PUT(reg) = t1
 
             if choose_register and stmt.offset in self.ignore_regs:
                 return None

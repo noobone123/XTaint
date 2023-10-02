@@ -264,11 +264,7 @@ class DataflowSolver():
 
                 # only callee dummy node dost not have irsb
                 if block.irsb:
-                    self._accurate_dataflow.execute_block_irsb(
-                        function, block, 
-                        function_reg_defs, function_stack_defs, 
-                        arguments
-                    )
+                    self._accurate_dataflow.execute_block_irsb(function, block, arguments)  # IMPORTANT: what did this function do
 
             #     else:
             #         if block.node_type in ['Call', 'iCall', 'Extern']:
