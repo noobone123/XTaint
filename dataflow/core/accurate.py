@@ -16,8 +16,8 @@ from ..global_config import basic_types
 
 
 import logging
-l = logging.getLogger("accurate_data_flow")
-l.setLevel('INFO')
+logger = logging.getLogger("accurate_data_flow")
+logger.setLevel('INFO')
 
 #DEBUG
 APTR_MAX_LS = 5
@@ -1305,7 +1305,7 @@ class AccurateDataFlow(EngineVEX):
             return []
 
         elif len(load_ptrs) > 1:
-            l.info("There are two load expr could be update in %s %s" % (code_location, trace_expr))
+            logger.info("There are two load expr could be update in %s %s" % (code_location, trace_expr))
 
         load_ptr = load_ptrs[0]
 
@@ -1335,7 +1335,7 @@ class AccurateDataFlow(EngineVEX):
             return []
 
         elif len(ls_actions) > 1:
-            l.info("There are two load expr could be update in %s %s" % (code_location, trace_expr))
+            logger.info("There are two load expr could be update in %s %s" % (code_location, trace_expr))
             return []
             # raise Exception
 
@@ -1375,7 +1375,7 @@ class AccurateDataFlow(EngineVEX):
                 return []
 
         elif len(ls_actions) > 1:
-            l.info("There are two load expr could be update in %s %s" % (code_location, trace_expr))
+            logger.info("There are two load expr could be update in %s %s" % (code_location, trace_expr))
             return []
             # raise Exception
 
@@ -1474,7 +1474,7 @@ class AccurateDataFlow(EngineVEX):
             return []
 
         elif len(ls_actions) > 1:
-            l.info("There are two load expr could be update in %s %s" % (code_location, trace_expr))
+            logger.info("There are two load expr could be update in %s %s" % (code_location, trace_expr))
             return []
             # raise Exception
 
@@ -2365,7 +2365,7 @@ class AccurateDataFlow(EngineVEX):
                                                          tracing_exprs, trace_dir)
 
         else:
-            l.info("not support the type of %s" % (str(action)))
+            logger.info("not support the type of %s" % (str(action)))
             new_exprs = []
 
         if new_exprs and 'F' not in trace_expr.expr.pattern and trace_dir == 'F':
@@ -2982,7 +2982,7 @@ class AccurateDataFlow(EngineVEX):
             new_forward_exprs  =[]
 
         else:
-            l.debug("This action type %s is not support!" % (action_type))
+            logger.debug("This action type %s is not support!" % (action_type))
             new_forward_exprs  =[]
 
         if len(new_forward_exprs):
@@ -3206,7 +3206,7 @@ class AccurateDataFlow(EngineVEX):
             return []
 
         else:
-            l.debug("This action type %s is not support!\n %s" % (action_type, action))
+            logger.debug("This action type %s is not support!\n %s" % (action_type, action))
             new_backward_exprs = []
 
         if len(new_backward_exprs):
@@ -4362,7 +4362,7 @@ class AccurateDataFlow(EngineVEX):
         opnds = wr_data[1]
 
         if len(opnds) != 1:
-            l.info("Not support the action: %s" % (action))
+            logger.info("Not support the action: %s" % (action))
             return []
 
         wr_opnd = opnds[0]
@@ -4515,7 +4515,7 @@ class AccurateDataFlow(EngineVEX):
             return []
 
         elif len(load_actions) > 1:
-            l.info("There are two load ptr should be update!")
+            logger.info("There are two load ptr should be update!")
 
         load_ptr = load_actions[0].action_data
         if var_type is None:
@@ -4693,7 +4693,7 @@ class AccurateDataFlow(EngineVEX):
 
         if type(st_data) is int:
             if st_data == 0:
-                l.info("The store data is zero, maybe the callee redefined it. do it future!")
+                logger.info("The store data is zero, maybe the callee redefined it. do it future!")
 
             st_data = claripy.BVV(st_data, st_size)
 
@@ -4754,13 +4754,13 @@ class AccurateDataFlow(EngineVEX):
             return []
 
         elif len(load_ptrs) > 1:
-            l.info("There are two load ptr should be update!")
+            logger.info("There are two load ptr should be update!")
 
         # print("backward-find-store: %s" % (load_ptrs))
 
         if type(st_data) is int:
             if st_data == 0:
-                l.info("The store data is zero, maybe the callee redefined it. do it future!")
+                logger.info("The store data is zero, maybe the callee redefined it. do it future!")
 
             st_data = claripy.BVV(st_data, st_size)
 
@@ -5175,7 +5175,7 @@ class AccurateDataFlow(EngineVEX):
             cc_deps.append((cc_dep1, cc_dep2))
 
         else:
-            l.info("The bool expr %s have not two args, do it future!" % (bool_con))
+            logger.info("The bool expr %s have not two args, do it future!" % (bool_con))
 
         return cc_deps
 
@@ -5233,7 +5233,7 @@ class AccurateDataFlow(EngineVEX):
     # Kai code!
     def convert_shift_operators(self, data ,data_type=None):
         if len(data.args) != 2:
-            l.info("The data %s has complex operators" % (data))
+            logger.info("The data %s has complex operators" % (data))
             return data
 
         new_data = data
@@ -5568,7 +5568,7 @@ class AccurateDataFlow(EngineVEX):
                         value_ast = claripy.BVV(value, self.arch_bits)
                         dst_data = claripy.Store(value_ast, self.arch_bits)
                     else:
-                        l.info("The stmt %s is special, do it future!" % (stmt))
+                        logger.info("The stmt %s is special, do it future!" % (stmt))
                         continue
 
                     t = (true_idx, src_data, dst_data)

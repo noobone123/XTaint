@@ -6,8 +6,8 @@ from collections import defaultdict
 from ..global_config import *
 
 import logging
-l = logging.getLogger("parse_ast")
-l.setLevel('INFO')
+logger = logging.getLogger("parse_ast")
+logger.setLevel('INFO')
 
 Taint_Offset = 0x64
 STACK_MIN, STACK_MAX = (0x6fffffff, 0x8000ffff)
@@ -354,7 +354,7 @@ def parse_bool_condition(bool_con):
         cc_deps.append(cc_dep2)
 
     else:
-        l.info("The bool expr %s have not two args, do it future!" % (bool_con))
+        logger.info("The bool expr %s have not two args, do it future!" % (bool_con))
 
     return cc_deps
 

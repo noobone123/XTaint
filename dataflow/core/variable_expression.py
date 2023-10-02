@@ -9,8 +9,8 @@ from .code_location import CodeLocation
 
 from dataflow.utils.errors import UpdateSimActionsError
 
-l = logging.getLogger("variable_expression")
-l.setLevel("INFO")
+logger = logging.getLogger("variable_expression")
+logger.setLevel("INFO")
 
 
 class Sim(object):
@@ -453,7 +453,7 @@ class TraceExpr(object):
         if _position:
             new_recur_expr.position = _position
         else:
-            l.info("Not find base position in new expr %s" % (new_recur_expr))
+            logger.info("Not find base position in new expr %s" % (new_recur_expr))
 
         new_recur_expr.offset = recurisve_expr.offset
         new_recur_expr.base = base
@@ -1580,7 +1580,7 @@ class VarExpr(object):
             replacement = claripy.BVS(replacement, subvariable.size(), explicit_name=True)
 
         if subvariable.size() != replacement.size():
-            l.info("Variable expr replace error, the size different.")
+            logger.info("Variable expr replace error, the size different.")
             return
 
         new_data = self.ast.replace(subvariable, replacement)
@@ -1786,7 +1786,7 @@ class RecursiveExpr(TraceExpr):
         if new_base is not None:
             new_recursive_expr.base = new_base
         else:
-            l.debug("Not find new base in new expr %s" % (new_expr))
+            logger.debug("Not find new base in new expr %s" % (new_expr))
             new_recursive_expr.base = self.base
 
         new_recursive_expr.offset = self.offset

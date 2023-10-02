@@ -20,17 +20,19 @@ from ..model import DataflowBlock, DataFlowCFG
 from dataflow.utils.errors import NoSupportVEXExpr, NoSupportType
 
 import logging
-l = logging.getLogger("vex_process")
-l.setLevel('INFO')
+logger = logging.getLogger("vex_process")
+logger.setLevel('INFO')
 
 
 choose_register = True
 
-choose_action_types = ['w', 'wo', 'p', 'wu', 'wn']  # `w`: write action, `wo`: write action with operator ?
+choose_action_types = ['w', 'wo', 'p', 'wu', 'wn']  # `w`: write action, `wo`: write action with operator ? `p` means put? , `wl`: write load?
 
 
 class Action(object):
-
+    """
+    This class is used to record the information of the action related to the specific code_location.
+    """
     def __init__(self, action_type, code_location, dst, src, var_size):
 
         self.action_type = action_type  # `s`: store
@@ -41,15 +43,20 @@ class Action(object):
 
         self.dst_alias = None   # for store stmt, we concern about the dst alias (which alias will be changed by the store stmt)
         self.src_alias = None   # for load stmt, we concern about the src alias (which alias will be used to load the value)
-        self.addr_value = None
+
+        # if current stmt has a store/load address, record the address
+        self.addr_value = None 
+        # Label the store/load addr's type (S, G, H, I, etc.)
+        self.addr_type = None
+        
+        # if current stmt has a store/load value, record the value
         self.value = None
 
         self.argument = None
 
         # Label the definition's right src type (S, G, H, I, etc.)  S: stack, G: global, H: heap, I: immediate, see function `get_value_label`, self.proj.arch.argument_registers
         self.src_type = None
-        # Label the store/load addr's type (S, G, H, I, etc.)
-        self.addr_type = None
+        
         # Label the variable's data type (int-immediate, ptr, char)
         self.var_type = None
 
@@ -794,7 +801,7 @@ class EngineVEX(BinaryInfo):
                     if ld_stmt is None:
                         ld_stmt = stmt
                     else:
-                        l.debug("Not a lwr instruction %s" % (block))
+                        logger.debug("Not a lwr instruction %s" % (block))
                         return
                 elif isinstance(stmt.data, pyvex.expr.Binop):
                     binop = stmt.data.op
@@ -802,14 +809,14 @@ class EngineVEX(BinaryInfo):
                         if or_stmt is None:
                             or_stmt = stmt
                         else:
-                            l.debug("Not a lwr instruction %s" % (block))
+                            logger.debug("Not a lwr instruction %s" % (block))
                             return
 
                     if 'Add' in binop:
                         if add_stmt is None:
                             add_stmt = stmt
                         else:
-                            l.debug("Not a lwr instruction %s" % (block))
+                            logger.debug("Not a lwr instruction %s" % (block))
                             return
 
         if ld_stmt is None or add_stmt is None or or_stmt is None:
@@ -911,7 +918,7 @@ class EngineVEX(BinaryInfo):
 
     def execute_block_irsb(self, function: FunctionObj, block: DataflowBlock, arguments):
         """
-        
+        pre execute the irsb block, get the define info and some important info.
         """
         irsb = block.irsb
         if irsb is None:
@@ -995,7 +1002,7 @@ class EngineVEX(BinaryInfo):
                     continue
 
                 # Ignore the Ijk_Call irsb's last PUT(rsp) vex
-                # which will change the vaule of rsp.
+                # which will change the value of rsp.
                 elif (last_ins and isinstance(stmt, pyvex.stmt.Put) and
                         stmt.offset == self.sp_offset):
                     continue
@@ -1026,7 +1033,6 @@ class EngineVEX(BinaryInfo):
 
         if block.node_type in ['Call', 'Extern']:
             reg_defs[self.ret_name] = (CodeLocation(block_addr,len(instructions)), 'ret')
-            # ret_info = live_defs[self.ret_name]
 
         self._summary_register_def_info(block, live_defs, reg_defs)
 
@@ -1036,166 +1042,175 @@ class EngineVEX(BinaryInfo):
         """
         pre process a stmt, and get the stmt's info.
         """
-        at = None
+        cur_action = None
 
         if isinstance(stmt, pyvex.stmt.Store):
 
-            stmt_data = stmt.data
-            st_size = stmt_data.result_size(tyenv)
+            right_data = stmt.data
+            st_size = right_data.result_size(tyenv)
 
-            # STle(t2)
+            # STle(t2) = xxxx, target is a RdTmp 
             if isinstance(stmt.addr, pyvex.expr.RdTmp):
-                s_addr = 't%d' % (stmt.addr.tmp)
+                left = 't%d' % (stmt.addr.tmp)
 
-            # STle(0xabcdef)
+            # STle(0xabcdef) = xxxx, target is a Const addr
             elif isinstance(stmt.addr, pyvex.expr.Const):
-                s_addr = stmt.addr.con.value
+                left = stmt.addr.con.value
 
             else:
-                l.debug("Not support the stmt: %s" % (stmt))
+                logger.debug("Not support the stmt: %s" % (stmt))
                 return None
 
-            # STle(t2) = t3 or STle(0x46ed58) = t3
-            if isinstance(stmt_data, pyvex.expr.RdTmp):
-                s_data = 't%d' % (stmt_data.tmp)
+            # STle(t2) = t3 or STle(0x46ed58) = t3, stored data is a RdTmp
+            if isinstance(right_data, pyvex.expr.RdTmp):
+                right = 't%d' % (right_data.tmp)
 
-            # STle(t2) = 0x45 or STle(0x46ed58) = 0x7543bd
-            elif isinstance(stmt_data, pyvex.expr.Const):
-                s_data = stmt_data.con.value
+            # STle(t2) = 0x45 or STle(0x46ed58) = 0x7543bd, stored data is a Const
+            elif isinstance(right_data, pyvex.expr.Const):
+                right = right_data.con.value
 
             else:
-                l.debug("Not support the stmt: %s" % (stmt))
+                logger.debug("Not support the stmt: %s" % (stmt))
                 return None
 
-            at = Action('s', code_location, s_addr, s_data, st_size)
-            if type(s_addr) is str:
-                addr_at = live_defs[s_addr]
-                addr_at.var_type = 'ptr'
-                if addr_at.action_type in choose_action_types:
-                    at.dst_alias = addr_at.src_alias if addr_at.src_alias else addr_at.src
+            cur_action = Action(action_type = 's',
+                        code_location = code_location, 
+                        dst = left, 
+                        src = right, 
+                        var_size = st_size)
+            
+            # store target is a tmp reg
+            if type(left) is str:
+                target_action = live_defs[left]
+                target_action.var_type = 'ptr'
+                if target_action.action_type in choose_action_types:
+                    cur_action.dst_alias = target_action.src_alias if target_action.src_alias else target_action.src
                 else:
-                    at.dst_alias = addr_at.dst
-                at.dst_locs = addr_at.code_location.stmt_idx
-                at.addr_value = addr_at.value
-                at.addr_type = addr_at.src_type
-                at.dst = addr_at.dst
+                    cur_action.dst_alias = target_action.dst
+                cur_action.dst_locs = target_action.code_location.stmt_idx
+                cur_action.addr_value = target_action.value
+                cur_action.addr_type = target_action.src_type
+                cur_action.dst = target_action.dst
 
+            # store target is a const addr
             else:
-                at.addr_value = s_addr
-                at.addr_type = 'G'
-                block.global_addrs.add(s_addr)
-                function.global_addrs.add(s_addr)
+                cur_action.addr_value = left
+                cur_action.addr_type = 'G'  # global addr
+                block.global_addrs.add(left)
+                function.global_addrs.add(left)
 
-            if type(s_data) is str:
-                data_at = live_defs[s_data]
+            # if stored value is a tmp reg
+            if type(right) is str:
+                data_at = live_defs[right]
                 if data_at.action_type in choose_action_types:
-                    at.src_alias = data_at.src_alias if data_at.src_alias else data_at.src
+                    cur_action.src_alias = data_at.src_alias if data_at.src_alias else data_at.src
                 else:
-                    at.src_alias = data_at.dst
-                at.src_locs = data_at.code_location.stmt_idx
-                at.src = data_at.dst
-                at.value = data_at.value
-                at.src_type = data_at.src_type
-                at.src = data_at.dst
+                    cur_action.src_alias = data_at.dst
+                cur_action.src_locs = data_at.code_location.stmt_idx
+                cur_action.src = data_at.dst
+                cur_action.value = data_at.value
+                cur_action.src_type = data_at.src_type
+                cur_action.src = data_at.dst
                 if data_at.var_type:
-                    at.var_type = data_at.var_type
+                    cur_action.var_type = data_at.var_type
 
-                if at.addr_type == 'S':
-                    if at.src_type == 'A':
-                        at.argument = data_at.argument
-                        if type(at.addr_value) is int:
-                            live_defs[at.addr_value] = data_at
+                if cur_action.addr_type == 'S':
+                    if cur_action.src_type == 'A':
+                        cur_action.argument = data_at.argument
+                        if type(cur_action.addr_value) is int:
+                            live_defs[cur_action.addr_value] = data_at
 
                     # elif type(data_at.value) is int and data_at.src_type != 'S' and data_at.value > 0 and type(at.addr_value) is int:
-                    elif type(data_at.value) is int and data_at.value > 0 and type(at.addr_value) is int:
-                        live_defs[at.addr_value] = data_at
+                    elif type(data_at.value) is int and data_at.value > 0 and type(cur_action.addr_value) is int:
+                        live_defs[cur_action.addr_value] = data_at
 
+            # if stored value is a const
             else:
-                at.value = s_data
-                at.src_type = at.get_concrete_src_type(s_data)
-                if at.addr_type == 'S' and s_data > 0 and type(at.addr_value) is int:
-                    live_defs[at.addr_value] = at
-                if at.src_type == 'G':
-                    at.var_type = 'ptr'
-                    block.global_addrs.add(s_data)
-                    function.global_addrs.add(s_data)
+                cur_action.value = right
+                cur_action.src_type = cur_action.get_concrete_src_type(right)
+                if cur_action.addr_type == 'S' and right > 0 and type(cur_action.addr_value) is int:
+                    live_defs[cur_action.addr_value] = cur_action
+                if cur_action.src_type == 'G':
+                    cur_action.var_type = 'ptr'
+                    block.global_addrs.add(right)
+                    function.global_addrs.add(right)
                     # print(" -->Gaddr: %s 0x%x" % (code_location, s_data))
 
             if st_size == 8:
-                at.var_type = basic_types[8]
+                cur_action.var_type = basic_types[8]
             elif st_size == 16:
-                at.var_type = basic_types[16]
+                cur_action.var_type = basic_types[16]
 
             # print("\n+++++++++++++++\n%s\n" % (at))
 
         elif isinstance(stmt, pyvex.stmt.WrTmp):
 
-            dst = 't%d' % (stmt.tmp)
-            stmt_data = stmt.data
-            wr_size = stmt_data.result_size(tyenv)
+            left = 't%d' % (stmt.tmp)
+            right_data = stmt.data
+            wr_size = right_data.result_size(tyenv)
             # print("WrTmp-stmt: %s %s" % (stmt, stmt_data))
 
             # t4 = LDle(t5) or t4 = LDle(0x46ed58)
-            if isinstance(stmt_data, pyvex.expr.Load):
+            if isinstance(right_data, pyvex.expr.Load):
                 wr_type = 'wl'
                 read_data = None
-                load_addr = stmt_data.addr
+                load_addr = right_data.addr
 
                 if isinstance(load_addr, pyvex.expr.RdTmp):
                     l_addr = 't%d' % (load_addr.tmp)
-                    addr_at = live_defs[l_addr]
-                    l_addr = addr_at.dst
-                    at = Action('wl', code_location, dst, l_addr, wr_size)
-                    addr_at.var_type = 'ptr'
-                    addr_alias = addr_at.src_alias if addr_at.src_alias else addr_at.src
-                    if addr_at.action_type in choose_action_types:
+                    target_action = live_defs[l_addr]
+                    l_addr = target_action.dst
+                    cur_action = Action('wl', code_location, left, l_addr, wr_size)
+                    target_action.var_type = 'ptr'
+                    addr_alias = target_action.src_alias if target_action.src_alias else target_action.src
+                    if target_action.action_type in choose_action_types:
                         if type(addr_alias) is tuple:
-                            at.src_alias = set_opnds_type(addr_alias, 'ptr')
+                            cur_action.src_alias = set_opnds_type(addr_alias, 'ptr')
                         else:
-                            at.src_alias = addr_alias
+                            cur_action.src_alias = addr_alias
                     else:
-                        at.src_alias = addr_at.dst
-                    at.src_locs = addr_at.code_location.stmt_idx
-                    at.addr_type = addr_at.src_type
-                    at.addr_value = addr_at.value
+                        cur_action.src_alias = target_action.dst
+                    cur_action.src_locs = target_action.code_location.stmt_idx
+                    cur_action.addr_type = target_action.src_type
+                    cur_action.addr_value = target_action.value
 
                     if wr_size == 8:
-                        at.var_type = basic_types[8]
+                        cur_action.var_type = basic_types[8]
                     elif wr_size == 16:
-                        at.var_type = basic_types[16]
+                        cur_action.var_type = basic_types[16]
 
-                    if type(at.addr_value) is int:
-                        if get_value_label(at.addr_value) == 'G':
-                            block.global_addrs.add(at.addr_value)
-                            function.global_addrs.add(at.addr_value)
+                    if type(cur_action.addr_value) is int:
+                        if get_value_label(cur_action.addr_value) == 'G':
+                            block.global_addrs.add(cur_action.addr_value)
+                            function.global_addrs.add(cur_action.addr_value)
                             # print(" -->Gaddr: %s 0x%x" % (code_location, at.addr_value))
-                        read_data = self.read_rodata(at.addr_value, wr_size, stmt_data.end)
+                        read_data = self.read_rodata(cur_action.addr_value, wr_size, right_data.end)
                         # print("Read-data: %x %s" % (at.addr_value, read_data))
                         if read_data:
-                            at.value = read_data
-                            at.src_type = at.get_concrete_src_type(read_data)
-                            if at.src_type == 'G':
-                                block.global_addrs.add(at.value)
-                                function.global_addrs.add(at.value)
+                            cur_action.value = read_data
+                            cur_action.src_type = cur_action.get_concrete_src_type(read_data)
+                            if cur_action.src_type == 'G':
+                                block.global_addrs.add(cur_action.value)
+                                function.global_addrs.add(cur_action.value)
                                 # print(" -->Gaddr: %s 0x%x" % (code_location, at.value))
 
-                        elif at.addr_type == 'S':
-                            arg_sym = self.judge_stack_argument(at.addr_value)
+                        elif cur_action.addr_type == 'S':
+                            arg_sym = self.judge_stack_argument(cur_action.addr_value)
                             if arg_sym:
                                 if arg_sym not in arguments:
                                     arguments.append(arg_sym)
                                     # print("Add stack-arg %s %s" % (code_location, arg_sym))
-                                at.src_alias = arg_sym
-                                at.src_type = 'A'
-                                at.argument = arg_sym
+                                cur_action.src_alias = arg_sym
+                                cur_action.src_type = 'A'
+                                cur_action.argument = arg_sym
 
-                            if at.addr_value in live_defs:
-                                ld_at = live_defs[at.addr_value]
-                                at.argument = ld_at.argument
+                            if cur_action.addr_value in live_defs:
+                                ld_at = live_defs[cur_action.addr_value]
+                                cur_action.argument = ld_at.argument
                                 if type(ld_at.value) is int:
-                                    at.src_type = at.get_concrete_src_type(ld_at.value) if ld_at.src_type is None else ld_at.src_type
-                                    if at.src_type and at.src_type != 'I':
-                                        at.var_type = 'ptr'
+                                    cur_action.src_type = cur_action.get_concrete_src_type(ld_at.value) if ld_at.src_type is None else ld_at.src_type
+                                    if cur_action.src_type and cur_action.src_type != 'I':
+                                        cur_action.var_type = 'ptr'
                                 # if type(ld_at.value) is int and ld_at.value in function.concrete_inc_addrs:
                                 #     pass
                                 # else:
@@ -1217,34 +1232,34 @@ class EngineVEX(BinaryInfo):
 
                 elif isinstance(load_addr, pyvex.expr.Const):
                     l_addr = load_addr.con.value
-                    at = Action('wl', code_location, dst, l_addr, wr_size)
-                    at.addr_type = 'G'
-                    at.addr_value = l_addr
+                    cur_action = Action('wl', code_location, left, l_addr, wr_size)
+                    cur_action.addr_type = 'G'
+                    cur_action.addr_value = l_addr
                     if get_value_label(l_addr) == 'G':
                         block.global_addrs.add(l_addr)
                         function.global_addrs.add(l_addr)
                         # print(" -->Gaddr: %s 0x%x" % (code_location, l_addr))
-                    read_data = self.read_rodata(l_addr, wr_size, stmt_data.end)
+                    read_data = self.read_rodata(l_addr, wr_size, right_data.end)
                     if read_data:
-                        at.value = read_data
-                        at.var_type = get_concrete_type(read_data, wr_size)
-                        at.src_type = at.get_concrete_src_type(read_data)
-                        if at.src_type == 'G':
-                            block.global_addrs.add(at.value)
-                            function.global_addrs.add(at.value)
+                        cur_action.value = read_data
+                        cur_action.var_type = get_concrete_type(read_data, wr_size)
+                        cur_action.src_type = cur_action.get_concrete_src_type(read_data)
+                        if cur_action.src_type == 'G':
+                            block.global_addrs.add(cur_action.value)
+                            function.global_addrs.add(cur_action.value)
                             # print(" -->Gaddr: %s 0x%x" % (code_location, at.value))
 
                 else:
-                    l.debug("Not support the stmt: %s" % (stmt))
+                    logger.debug("Not support the stmt: %s" % (stmt))
                     return None
 
-                live_defs[dst] = at
+                live_defs[left] = cur_action
                 # print("\n+++++++++++++++\n%s\n" % (at))
 
             # t4 = Add(t3, 0x20), t4 = Add(t3, t2)
-            elif isinstance(stmt_data, pyvex.expr.Binop):
+            elif isinstance(right_data, pyvex.expr.Binop):
                 wr_type = 'wo'
-                binop = stmt_data.op
+                binop = right_data.op
                 opnds = []
                 alias_info = {}
                 opnds_size = []
@@ -1252,7 +1267,7 @@ class EngineVEX(BinaryInfo):
                 src_locs = []
 
                 i = 0
-                for child_expr in stmt_data.child_expressions:
+                for child_expr in right_data.child_expressions:
                     i += 1
                     opnd_size = child_expr.result_size(tyenv)
                     opnd_size = opnd_size if opnd_size else self.arch_bits
@@ -1299,12 +1314,12 @@ class EngineVEX(BinaryInfo):
                     opnds_size.append(opnd_size)
 
                 op = '+' if 'Add' in binop else '-' if 'Sub' in binop else binop
-                src = (op, tuple(opnds), tuple(opnds_size), tuple(opnds_type))
+                right = (op, tuple(opnds), tuple(opnds_size), tuple(opnds_type))
                 default_type = basic_types[wr_size]
                 var_type = calculate_variable_type(op, opnds_type, default_type=default_type)
-                at = Action(wr_type, code_location, dst, src, wr_size)
-                at.var_type = var_type
-                at.src_locs = src_locs
+                cur_action = Action(wr_type, code_location, left, right, wr_size)
+                cur_action.var_type = var_type
+                cur_action.src_locs = src_locs
 
                 try:
                     results = self.calculate_binop_v3(binop, opnds, opnds_size, live_defs)
@@ -1323,34 +1338,34 @@ class EngineVEX(BinaryInfo):
 
                 if op == '+' and len(opnd_aliases) == 2:
                     base_offset, r_size, r_type = self._judge_base_offset_v2(opnd_aliases, opnds_size, opnds_type)
-                    at.src_alias = (op, base_offset, r_size, r_type)
+                    cur_action.src_alias = (op, base_offset, r_size, r_type)
 
                 elif op == '-':
-                    at.src_alias = (op, tuple(opnd_aliases), tuple(opnds_size), tuple(opnds_type))
+                    cur_action.src_alias = (op, tuple(opnd_aliases), tuple(opnds_size), tuple(opnds_type))
 
                 else:
-                    at.src_alias = (binop, tuple(opnd_aliases), tuple(opnds_size), tuple(opnds_type))
+                    cur_action.src_alias = (binop, tuple(opnd_aliases), tuple(opnds_size), tuple(opnds_type))
 
                 if len(results) == 1:
-                    at.value = results[0]
+                    cur_action.value = results[0]
                 elif len(results) > 1:
-                    at.value = None
+                    cur_action.value = None
                     # at.value = results
 
-                if type(at.value) is int:
-                    at.src_type = at.get_concrete_src_type(at.value)
-                    at.var_type = basic_types['default'] if get_mem_permission(at.value) == 'imm' else 'ptr'
-                    if at.src_type == 'G':
-                        block.global_addrs.add(at.value)
-                        function.global_addrs.add(at.value)
+                if type(cur_action.value) is int:
+                    cur_action.src_type = cur_action.get_concrete_src_type(cur_action.value)
+                    cur_action.var_type = basic_types['default'] if get_mem_permission(cur_action.value) == 'imm' else 'ptr'
+                    if cur_action.src_type == 'G':
+                        block.global_addrs.add(cur_action.value)
+                        function.global_addrs.add(cur_action.value)
                         # print(" -->Gaddr: %s 0x%x" % (code_location, at.value))
 
-                live_defs[dst] = at
+                live_defs[left] = cur_action
 
                 # print("\n+++++++++++++++\n%s\n" % (at))
 
             # t4 = ITE(t1, t2, t3)
-            elif isinstance(stmt_data, pyvex.expr.ITE):
+            elif isinstance(right_data, pyvex.expr.ITE):
 
                 wr_type = 'wi'
                 var_type = None
@@ -1359,7 +1374,7 @@ class EngineVEX(BinaryInfo):
                 alias_opnds = []
                 src_locs = []
                 i = 0
-                for child_expr in stmt_data.child_expressions:
+                for child_expr in right_data.child_expressions:
                     if isinstance(child_expr, pyvex.expr.RdTmp):
                         opnd = 't%d' % (child_expr.tmp)
                         opnd_at = live_defs[opnd]
@@ -1383,30 +1398,30 @@ class EngineVEX(BinaryInfo):
                         src_locs.append(0)
 
                     else:
-                        l.debug("Not support the stmt: %s" % (stmt))
+                        logger.debug("Not support the stmt: %s" % (stmt))
                         return None
 
                     i = i + 1
                     opnds.append(opnd)
 
-                src = tuple(opnds)
-                at = Action('wi', code_location, dst, src, wr_size)
-                at.src_alias = tuple(alias_opnds)
-                at.src_locs = src_locs
-                at.var_type = var_type
+                right = tuple(opnds)
+                cur_action = Action('wi', code_location, left, right, wr_size)
+                cur_action.src_alias = tuple(alias_opnds)
+                cur_action.src_locs = src_locs
+                cur_action.var_type = var_type
 
                 # at.src_type = 'N' # TODO
 
-                live_defs[dst] = at
+                live_defs[left] = cur_action
                 # print("\n+++++++++++++++\n%s\n" % (at))
 
             # t14 = 1Uto64(t15)
-            elif isinstance(stmt_data, pyvex.expr.Unop):
-                binop = stmt_data.op
+            elif isinstance(right_data, pyvex.expr.Unop):
+                binop = right_data.op
                 # print("Unop: %s" % (binop))
 
                 opnds = []
-                for child_expr in stmt_data.child_expressions:
+                for child_expr in right_data.child_expressions:
                     if isinstance(child_expr, pyvex.expr.RdTmp):
                         opnd = 't%d' % (child_expr.tmp)
 
@@ -1414,13 +1429,13 @@ class EngineVEX(BinaryInfo):
                         opnd = child_expr.con.value
 
                     else:
-                        l.debug("Not support the stmt: %s" % (stmt))
+                        logger.debug("Not support the stmt: %s" % (stmt))
                         return None
 
                     opnds.append(opnd)
 
                 if len(opnds) != 1:
-                    l.info("The Unop %s has two opnds" % (stmt))
+                    logger.info("The Unop %s has two opnds" % (stmt))
                     raise Exception
 
                 opnd_0 = opnds[0]
@@ -1431,18 +1446,18 @@ class EngineVEX(BinaryInfo):
                     new_at.var_type = basic_types[wr_size]
                     if 'Not' in binop:
                         new_at.action_type = 'wn'
-                    live_defs[dst] = new_at
+                    live_defs[left] = new_at
 
-                    at = Action('wu', code_location, dst, new_at.dst, wr_size)
-                    at.src_locs = new_at.code_location.stmt_idx
+                    cur_action = Action('wu', code_location, left, new_at.dst, wr_size)
+                    cur_action.src_locs = new_at.code_location.stmt_idx
                     # print("\n+++++++++++++++\n%s\n" % (at))
 
                 elif type(opnd_0) is int:
-                    at = Action('wu', code_location, dst, opnd_0, wr_size)
-                    at.value = opnd_0
-                    at.src_type = 'I'
-                    at.var_type = basic_types[wr_size]
-                    live_defs[dst] = at
+                    cur_action = Action('wu', code_location, left, opnd_0, wr_size)
+                    cur_action.value = opnd_0
+                    cur_action.src_type = 'I'
+                    cur_action.var_type = basic_types[wr_size]
+                    live_defs[left] = cur_action
 
                     # print("\n+++++++++++++++\n%s\n" % (at))
 
@@ -1450,89 +1465,89 @@ class EngineVEX(BinaryInfo):
             else:
                 wr_type = 'w'
 
-                if isinstance(stmt_data, pyvex.expr.RdTmp):     # e.g. t0 = t1
-                    src = 't%d' % (stmt_data.tmp)
-                    live_defs[dst] = live_defs[src]
+                if isinstance(right_data, pyvex.expr.RdTmp):     # e.g. t0 = t1
+                    right = 't%d' % (right_data.tmp)
+                    live_defs[left] = live_defs[right]
 
-                elif isinstance(stmt_data, pyvex.expr.Get):     # e.g. t0 = GET:I32(offset=60) 
-                    src = 'r%d' % (stmt_data.offset)
-                    at = Action(wr_type, code_location, dst, src, wr_size)
+                elif isinstance(right_data, pyvex.expr.Get):     # e.g. t0 = GET:I32(offset=60) 
+                    right = 'r%d' % (right_data.offset)
+                    cur_action = Action(wr_type, code_location, left, right, wr_size)
 
-                    if src in live_defs:
-                        src_at = live_defs[src]
-                        at.value = src_at.value
-                        at.src_type = src_at.src_type
-                        at.var_type = src_at.var_type
-                        if src_at.code_location.block_addr == code_location.block_addr:
-                            if src_at.action_type in choose_action_types:
-                                at.src_alias = src_at.src_alias if src_at.src_alias else src_at.src
-                            live_defs[dst] = src_at
+                    if right in live_defs:
+                        right_action = live_defs[right]
+                        cur_action.value = right_action.value
+                        cur_action.src_type = right_action.src_type
+                        cur_action.var_type = right_action.var_type
+                        if right_action.code_location.block_addr == code_location.block_addr:
+                            if right_action.action_type in choose_action_types:
+                                cur_action.src_alias = right_action.src_alias if right_action.src_alias else right_action.src
+                            live_defs[left] = right_action
                         else:
-                            live_defs[dst] = at
-                            at.src_locs = 0
-                        at.argument = src_at.argument
+                            live_defs[left] = cur_action
+                            cur_action.src_locs = 0
+                        cur_action.argument = right_action.argument
 
-                    elif src in self.argument_vars:     # if current register is arguments of current function
-                        at.src_type = 'A'   # src_type: A means argument
-                        at.src_locs = 0
+                    elif right in self.argument_vars:     # if current register is arguments of current function
+                        cur_action.src_type = 'A'   # src_type: A means argument
+                        cur_action.src_locs = 0
 
                         loc = CodeLocation(block.addr, 0)
-                        src_at = Action('p', loc, src, src, wr_size)
-                        src_at.src_type = 'A'
-                        src_at.src_locs = 0
-                        src_at.argument = src
-                        live_defs[src] = src_at
+                        right_action = Action('p', loc, right, right, wr_size)
+                        right_action.src_type = 'A'
+                        right_action.src_locs = 0
+                        right_action.argument = right
+                        live_defs[right] = right_action
 
-                        live_defs[dst] = at
-                        if src not in arguments:
+                        live_defs[left] = cur_action
+                        if right not in arguments:
                             # In ARM, the first instruction is STMFD SP!, {R3-R7, LR}
                             if not (code_location.ins_addr == function.addr and code_location.stmt_idx > 3):
-                                arguments.append(src)
+                                arguments.append(right)
                                 # print("Add-argument: %s %s" % (block, src))
                                 # print(code_location.ins_addr, function)
 
-                        at.argument = src
+                        cur_action.argument = right
 
                     else:
-                        at.src_type = 'N'
-                        live_defs[dst] = at
+                        cur_action.src_type = 'N'
+                        live_defs[left] = cur_action
 
                         loc = CodeLocation(block.addr, 0)
-                        src_at = Action('p', loc, src, src, wr_size)
-                        live_defs[src] = src_at
+                        right_action = Action('p', loc, right, right, wr_size)
+                        live_defs[right] = right_action
 
                     # print("\n+++++++++++++++\n%s\n" % (at))
 
-                elif isinstance(stmt_data, pyvex.expr.Const):
-                    src = stmt_data.con.value
-                    at = Action('p', code_location, dst, src, wr_size)
-                    at.value = src
-                    at.var_type = self.get_concrete_type(src, wr_size)
-                    at.src_type = at.get_concrete_src_type(src)
-                    if at.src_type == 'G':
-                        block.global_addrs.add(at.value)
-                        function.global_addrs.add(at.value)
+                elif isinstance(right_data, pyvex.expr.Const):
+                    right = right_data.con.value
+                    cur_action = Action('p', code_location, left, right, wr_size)
+                    cur_action.value = right
+                    cur_action.var_type = self.get_concrete_type(right, wr_size)
+                    cur_action.src_type = cur_action.get_concrete_src_type(right)
+                    if cur_action.src_type == 'G':
+                        block.global_addrs.add(cur_action.value)
+                        function.global_addrs.add(cur_action.value)
                         # print(" -->Gaddr: %s 0x%x" % (code_location, at.value))
 
-                    live_defs[dst] = at
+                    live_defs[left] = cur_action
 
                 else:
-                    l.debug("Not support the stmt: %s %s\n" % (code_location, stmt))
-                    at = Action('none', code_location, dst, None, wr_size)
-                    live_defs[dst] = at
+                    logger.debug("Not support the stmt: %s %s\n" % (code_location, stmt))
+                    cur_action = Action('none', code_location, left, None, wr_size)
+                    live_defs[left] = cur_action
 
         elif isinstance(stmt, pyvex.stmt.Put):  # e.g. PUT(reg) = t1
 
             if choose_register and stmt.offset in self.ignore_regs:
                 return None
 
-            dst = 'r%d' % (stmt.offset)
-            stmt_data = stmt.data
-            put_size = stmt_data.result_size(tyenv)
+            left = 'r%d' % (stmt.offset)
+            right_data = stmt.data
+            put_size = right_data.result_size(tyenv)
 
-            if isinstance(stmt_data, pyvex.expr.RdTmp):
-                src = 't%d' % (stmt_data.tmp)
-                at = Action('p', code_location, dst, src, put_size)
+            if isinstance(right_data, pyvex.expr.RdTmp):
+                right = 't%d' % (right_data.tmp)
+                cur_action = Action('p', code_location, left, right, put_size)
 
                 # if src not in live_defs:
                 #     at = Action('none', code_location, dst, src, put_size)
@@ -1540,48 +1555,48 @@ class EngineVEX(BinaryInfo):
                 #     l.error("Not found put tmp: %s %s\n" % (code_location, stmt))
                 #     return
 
-                src_at = live_defs[src]
-                if src_at.action_type in choose_action_types:
-                    at.src_alias = src_at.src_alias if src_at.src_alias else src_at.src
+                right_action = live_defs[right]
+                if right_action.action_type in choose_action_types:
+                    cur_action.src_alias = right_action.src_alias if right_action.src_alias else right_action.src
                 else:
-                    at.src_alias = src_at.dst
-                    src = src_at.dst
+                    cur_action.src_alias = right_action.dst
+                    right = right_action.dst
 
-                at.src = src_at.dst
-                at.src_locs = src_at.code_location.stmt_idx
-                at.value = src_at.value
-                at.src_type = src_at.src_type
-                at.var_type = src_at.var_type
-                at.argument = src_at.argument
+                cur_action.src = right_action.dst
+                cur_action.src_locs = right_action.code_location.stmt_idx
+                cur_action.value = right_action.value
+                cur_action.src_type = right_action.src_type
+                cur_action.var_type = right_action.var_type
+                cur_action.argument = right_action.argument
 
-                live_defs[dst] = at
+                live_defs[left] = cur_action
 
                 # print("\n+++++++++++++++\n%s\n" % (at))
 
-                reg_defs[dst] = (code_location, src)
+                reg_defs[left] = (code_location, right)
 
-            elif isinstance(stmt_data, pyvex.expr.Const):
-                src = stmt_data.con.value
-                at = Action('p', code_location, dst, src, put_size)
-                at.value = src
-                at.var_type = get_concrete_type(src, put_size)
-                at.src_type = at.get_concrete_src_type(src)
+            elif isinstance(right_data, pyvex.expr.Const):
+                right = right_data.con.value
+                cur_action = Action('p', code_location, left, right, put_size)
+                cur_action.value = right
+                cur_action.var_type = get_concrete_type(right, put_size)
+                cur_action.src_type = cur_action.get_concrete_src_type(right)
 
-                live_defs[dst] = at
-                reg_defs[dst] = (code_location, src)
+                live_defs[left] = cur_action
+                reg_defs[left] = (code_location, right)
 
-                if at.src_type == 'G':
-                    block.global_addrs.add(at.value)
-                    function.global_addrs.add(at.value)
+                if cur_action.src_type == 'G':
+                    block.global_addrs.add(cur_action.value)
+                    function.global_addrs.add(cur_action.value)
                 # print("\n+++++++++++++++\n%s\n" % (at))
 
             else:
-                l.debug("Not support the stmt: %s" % (stmt))
+                logger.debug("Not support the stmt: %s" % (stmt))
                 return None
 
         # t35 = if (t80) ILGop_Ident32(LDle(t45)) else t27
         elif stmt.tag == 'Ist_LoadG':
-            dst = 't%d' % (stmt.dst)
+            left = 't%d' % (stmt.dst)
             l_addr = self.translate_loadg_expr(stmt.addr)
             alt = self.translate_loadg_expr(stmt.alt)
             guard = self.translate_loadg_expr(stmt.guard)
@@ -1590,8 +1605,8 @@ class EngineVEX(BinaryInfo):
             alt_size = stmt.alt.result_size(tyenv)
 
             src_locs = []
-            at = Action('lg', code_location, dst, None, converted_size)
-            at.src_locs = src_locs
+            cur_action = Action('lg', code_location, left, None, converted_size)
+            cur_action.src_locs = src_locs
 
             src_aliases = []
             guard_at = live_defs[guard]
@@ -1600,36 +1615,36 @@ class EngineVEX(BinaryInfo):
             src_locs.append(guard_at.code_location.stmt_idx)
 
             if type(l_addr) is str:
-                addr_at = live_defs[l_addr]
-                l_addr = addr_at.dst
-                if addr_at.action_type in choose_action_types:
-                    src_alias = addr_at.src_alias if addr_at.src_alias else addr_at.src
+                target_action = live_defs[l_addr]
+                l_addr = target_action.dst
+                if target_action.action_type in choose_action_types:
+                    src_alias = target_action.src_alias if target_action.src_alias else target_action.src
                     src_aliases.append(src_alias)
                 else:
-                    src_aliases.append(addr_at.dst)
-                src_locs.append(addr_at.code_location.stmt_idx)
-                at.addr_value = addr_at.value
-                at.addr_type = addr_at.src_type
-                self._execute_action_load_value(at, read_size, stmt.end)
+                    src_aliases.append(target_action.dst)
+                src_locs.append(target_action.code_location.stmt_idx)
+                cur_action.addr_value = target_action.value
+                cur_action.addr_type = target_action.src_type
+                self._execute_action_load_value(cur_action, read_size, stmt.end)
 
             elif type(l_addr) is int:
                 src_aliases.append(l_addr)
                 src_locs.append(0)
-                at.addr_value = l_addr
-                at.addr_type = 'G'
+                cur_action.addr_value = l_addr
+                cur_action.addr_type = 'G'
                 if get_value_label(l_addr) == 'G':
                     block.global_addrs.add(l_addr)
                     function.global_addrs.add(l_addr)
                     # print(" -->Gaddr: %s 0x%x" % (code_location, l_addr))
                 read_data = self.read_rodata(l_addr, read_size, stmt.end)
                 if read_data:
-                    at.value = read_data
+                    cur_action.value = read_data
                     if get_value_label(read_data) == 'G':
-                        block.global_addrs.add(at.value)
-                        function.global_addrs.add(at.value)
+                        block.global_addrs.add(cur_action.value)
+                        function.global_addrs.add(cur_action.value)
                         # print(" -->Gaddr: %s 0x%x" % (code_location, at.value))
                 else:
-                    at.src_type = '*G'
+                    cur_action.src_type = '*G'
 
             if type(alt) is str:
                 alt_at = live_defs[alt]
@@ -1664,102 +1679,102 @@ class EngineVEX(BinaryInfo):
             #     else:
             #         at.value = alt_value
 
-            at.src = ((guard, l_addr, alt), (1, read_size, alt_size))
-            at.src_alias = (tuple(src_aliases), (1, read_size, alt_size))
+            cur_action.src = ((guard, l_addr, alt), (1, read_size, alt_size))
+            cur_action.src_alias = (tuple(src_aliases), (1, read_size, alt_size))
 
-            live_defs[dst] = at
+            live_defs[left] = cur_action
             # print("\n+++++++++++++++\n%s\n" % (at))
 
         # if (t82) STle(t68) = t35
         elif stmt.tag == 'Ist_StoreG':
             guard = self.translate_loadg_expr(stmt.guard)
 
-            stmt_data = stmt.data
-            st_size = stmt_data.result_size(tyenv)
+            right_data = stmt.data
+            st_size = right_data.result_size(tyenv)
 
             # STleg(t2)
             if isinstance(stmt.addr, pyvex.expr.RdTmp):
-                s_addr = 't%d' % (stmt.addr.tmp)
+                left = 't%d' % (stmt.addr.tmp)
 
             # STle(0xabcdef)
             elif isinstance(stmt.addr, pyvex.expr.Const):
-                s_addr = stmt.addr.con.value
+                left = stmt.addr.con.value
 
             else:
-                l.debug("Not support the stmt: %s" % (stmt))
+                logger.debug("Not support the stmt: %s" % (stmt))
                 return None
 
             # STle(t2) = t3 or STle(0x46ed58) = t3
-            if isinstance(stmt_data, pyvex.expr.RdTmp):
-                s_data = 't%d' % (stmt_data.tmp)
+            if isinstance(right_data, pyvex.expr.RdTmp):
+                right = 't%d' % (right_data.tmp)
 
             # STle(t2) = 0x45 or STle(0x46ed58) = 0x7543bd
-            elif isinstance(stmt_data, pyvex.expr.Const):
-                s_data = stmt_data.con.value
+            elif isinstance(right_data, pyvex.expr.Const):
+                right = right_data.con.value
 
             else:
-                l.debug("Not support the stmt: %s" % (stmt))
+                logger.debug("Not support the stmt: %s" % (stmt))
                 return None
 
-            at = Action('sg', code_location, s_addr, (guard, s_data), st_size)
-            if type(s_addr) is str:
-                addr_at = live_defs[s_addr]
-                addr_at.var_type = 'ptr'
-                if addr_at.action_type in choose_action_types:
-                    at.dst_alias = addr_at.src_alias if addr_at.src_alias else addr_at.src
+            cur_action = Action('sg', code_location, left, (guard, right), st_size)
+            if type(left) is str:
+                target_action = live_defs[left]
+                target_action.var_type = 'ptr'
+                if target_action.action_type in choose_action_types:
+                    cur_action.dst_alias = target_action.src_alias if target_action.src_alias else target_action.src
                 else:
-                    at.dst_alias = addr_at.dst
-                at.dst_locs = addr_at.code_location.stmt_idx
-                at.addr_value = addr_at.value
-                at.addr_type = addr_at.src_type
-                at.dst = addr_at.dst
+                    cur_action.dst_alias = target_action.dst
+                cur_action.dst_locs = target_action.code_location.stmt_idx
+                cur_action.addr_value = target_action.value
+                cur_action.addr_type = target_action.src_type
+                cur_action.dst = target_action.dst
 
             else:
-                at.addr_value = s_addr
-                at.addr_type = 'G'
+                cur_action.addr_value = left
+                cur_action.addr_type = 'G'
 
-            at.src_locs = []
+            cur_action.src_locs = []
             guard_at = live_defs[guard]
             guard_alias = guard_at.src_alias if guard_at.src_alias else guard_at.src
-            at.src_locs.append(guard_at.code_location.stmt_idx)
+            cur_action.src_locs.append(guard_at.code_location.stmt_idx)
 
-            s_data_alias = s_data
-            if type(s_data) is str:
-                data_at = live_defs[s_data]
+            s_data_alias = right
+            if type(right) is str:
+                data_at = live_defs[right]
                 if data_at.action_type in choose_action_types:
                     s_data_alias = data_at.src_alias if data_at.src_alias else data_at.src
                 else:
                     s_data_alias = data_at.dst
-                at.src_locs.append(data_at.code_location.stmt_idx)
-                at.value = data_at.value
-                at.src_type = data_at.src_type
-                at.src = data_at.dst
+                cur_action.src_locs.append(data_at.code_location.stmt_idx)
+                cur_action.value = data_at.value
+                cur_action.src_type = data_at.src_type
+                cur_action.src = data_at.dst
                 if data_at.var_type:
-                    at.var_type = data_at.var_type
+                    cur_action.var_type = data_at.var_type
 
             else:
-                at.value = s_data
+                cur_action.value = right
                 # at.src_type = at.get_concrete_src_type(s_data)
-                at.src_locs.append(0)
+                cur_action.src_locs.append(0)
 
-            at.src_alias = (guard_alias, s_data_alias)
+            cur_action.src_alias = (guard_alias, s_data_alias)
 
             # print("\n+++++++++++++++\n%s\n" % (at))
 
         else:
             # ------ IMark(0x19ba0, 4, 0) ------ will also be translated to None
-            l.debug("Not support: %s %s %s" % (code_location, stmt, stmt.tag))
+            logger.debug("Not support: %s %s %s" % (code_location, stmt, stmt.tag))
             if hasattr(stmt, 'tmp'):
-                dst = 't%d' %(stmt.tmp)
-                at = Action('none', code_location, dst, None, None)
-                live_defs[dst] = at
+                left = 't%d' %(stmt.tmp)
+                cur_action = Action('none', code_location, left, None, None)
+                live_defs[left] = cur_action
             elif hasattr(stmt, 'result'):
-                dst = 't%d' %(stmt.result)
-                at = Action('none', code_location, dst, None, None)
-                live_defs[dst] = at
+                left = 't%d' %(stmt.result)
+                cur_action = Action('none', code_location, left, None, None)
+                live_defs[left] = cur_action
             return None
 
-        return at
+        return cur_action
 
     def _calculate_stack_pointer(self, opnds):
         opnd_0, opnd_1 = opnds[0][0], opnds[1][0]

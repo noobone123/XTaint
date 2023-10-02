@@ -4,8 +4,8 @@ from .parse_ast import *
 from ..global_config import *
 
 import logging
-l = logging.getLogger("variable_type")
-l.setLevel('INFO')
+logger = logging.getLogger("variable_type")
+logger.setLevel('INFO')
 
 def get_sim_scope(var, sims):
     if var in sims and sims[var].var_type == 'ptr':
@@ -30,7 +30,7 @@ def get_expr_base_ptr(expr):
 
     else:
         # print("BASE-PTR-ERROR, %s" % (expr))
-        l.debug("BASE-PTR-ERROR, %s" % (expr))
+        logger.debug("BASE-PTR-ERROR, %s" % (expr))
 
     # if base_ptr is None:
     #     print("NON-BASE, %s" % (expr))
