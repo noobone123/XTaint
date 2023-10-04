@@ -13,7 +13,7 @@ from dataflow.solver import DataflowSolver
 from dataflow.config import Config
 from dataflow.core import FastDataFlow
 from dataflow.core import AccurateDataFlow
-from dataflow import global_config
+import global_config
 
 CONFIG = pathlib.Path(__file__).parent / "config.json"
 

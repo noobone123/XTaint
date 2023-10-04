@@ -7,13 +7,14 @@ from collections import defaultdict
 from pyvex.const import get_type_size
 from pyvex import IRSB, stmt
 
-from utils.bin_factory import BinaryInfo, FunctionObj
+from utils.bin_factory.binaryinfo import BinaryInfo
+from utils.bin_factory.function_obj import FunctionObj
 from .irop import translate
 from .variable_expression import VarExpr, TraceExpr, SimAction, Sim
 # from .vex.statements import translate_stmt
 from .parse_ast import *
 from .code_location import CodeLocation
-from ..global_config import basic_types, arch_info
+from global_config import basic_types, arch_info
 from .variable_type import *
 from ..model import DataflowBlock, DataFlowCFG
 

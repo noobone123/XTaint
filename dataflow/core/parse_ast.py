@@ -3,7 +3,7 @@
 import re
 import claripy
 from collections import defaultdict
-from ..global_config import *
+from global_config import *
 
 import logging
 logger = logging.getLogger("parse_ast")

@@ -7,6 +7,7 @@ from typing import List, Dict, Tuple, Set
 from utils.bin_factory import BinaryInfo, BinFactory, LoopFinder, FunctionObj
 from dataflow.model import DataFlowCFG, CFGBase, DataflowBlock
 from dataflow.core import FastDataFlow, AccurateDataFlow, CodeLocation, Action, EngineVEX
+from dataflow.procedures import SIM_PROCEDURES
 
 logger = logging.getLogger("DataflowSolver")
 logger.setLevel("INFO")
@@ -38,6 +39,21 @@ class DataflowSolver():
         # initialize the taint info
         self.ignore_lib_functions = ['syslog']
         self.taint_source = ['BIO_read', 'recv', 'recvfrom', 'SSL_read', 'fgets', 'fread', 'read', 'BIO_gets', 'getenv'] 
+
+        # initialze the arch info
+        self.sp_name = self.binary_info.sp_name
+        self.bp_name = self.binary_info.bp_name
+        self.ret_name = self.binary_info.ret_name
+        self.arch_bits = self.binary_info.arch_bits
+        self._call_graph = self.bin_factory.cg
+
+        self._sim_procedures = {}
+        self._initial_lib_procedures()
+
+    def _initial_lib_procedures(self):
+        for lib, procs in SIM_PROCEDURES.items():
+            for name, proc in procs.items():
+                self._sim_procedures[name] = proc()
 
     def solve(self):
         """
@@ -266,10 +282,10 @@ class DataflowSolver():
                 if block.irsb:
                     self._accurate_dataflow.execute_block_irsb(function, block, arguments)  # IMPORTANT: what did this function do
 
-            #     else:
-            #         if block.node_type in ['Call', 'iCall', 'Extern']:
-            #             self._execute_callsite_node(function, block)
-            #             # self._execute_libc_callee_to_infer_type(function, block)
+                else:
+                    if block.node_type in ['Call', 'iCall', 'Extern']:
+                        self._execute_callsite_node(function, block)
+                        # self._execute_libc_callee_to_infer_type(function, block)
 
             #     backward_trace_variable_type(function, block)
             #     # function.sort_arguments()
@@ -346,3 +362,30 @@ class DataflowSolver():
         initial_action.src_type = src_type
         initial_action.var_type = var_type
         block.live_defs[reg_name] = initial_action
+
+    def _execute_callsite_node(self, function, callsite):
+        """
+        Process libc function and infer the arguments and ret type.
+        """
+        # if external lib functions
+        if type(callsite.target) is str:
+            lib_func_name = callsite.target
+            if lib_func_name in self._sim_procedures:
+                proc = self._sim_procedures[lib_func_name]
+                proc.execute(callsite, self.proj, "infer_type", caller_function=function)
+
+            else:
+                at = Action('p', CodeLocation(callsite.addr, 0), self.ret_name, 'RET', self.arch_bits)
+                callsite.live_defs[self.ret_name] = at
+
+        else:
+            funcea = callsite.target
+            callee_function = self._call_graph._nodes.get(funcea)
+            function_name = callee_function.procedural_name if callee_function else None
+            if function_name in self._sim_procedures:
+                proc = self._sim_procedures[function_name]
+                proc.execute(callsite, self.proj, "infer_type", caller_function=function)
+
+            else:
+                at = Action('p', CodeLocation(callsite.addr, 0), self.ret_name, 'RET', self.arch_bits)
+                callsite.live_defs[self.ret_name] = at

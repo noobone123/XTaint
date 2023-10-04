@@ -12,7 +12,7 @@ from .vex_process import EngineVEX
 
 from .parse_ast import *
 from .variable_type import *
-from ..global_config import basic_types
+from global_config import basic_types
 
 
 import logging
